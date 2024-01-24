@@ -1,9 +1,9 @@
-ARG BUILDER_IMAGE
-ARG BASE_IMAGE
+ARG BUILDER_IMAGE=registry-proxy.engineering.redhat.com/rh-osbs/openshift-golang-builder:v1.21
+ARG BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal:8.8
 # Build the manager binary
 FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} as builder
 
-ARG CGO_ENABLED
+ARG CGO_ENABLED=1
 ARG TARGETARCH
 
 WORKDIR /workspace
