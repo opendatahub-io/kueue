@@ -1,9 +1,9 @@
-ARG BUILDER_IMAGE
-ARG BASE_IMAGE
+ARG BUILDER_IMAGE=golang:1.21
+ARG BASE_IMAGE=registry.access.redhat.com/ubi8/go-toolset:1.20.10
 # Build the manager binary
 FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} as builder
 
-ARG CGO_ENABLED
+ARG CGO_ENABLED=1
 ARG TARGETARCH
 
 WORKDIR /workspace
