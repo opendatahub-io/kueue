@@ -1,3 +1,5 @@
+# RHOAI configuration for Kueue.
+
 # Adds namespace to all resources.
 namespace: opendatahub
 
@@ -18,6 +20,7 @@ resources:
 - ../components/manager
 - ../components/internalcert
 - ../components/webhook
+- binding_admin_roles.yaml
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../components/prometheus
 
