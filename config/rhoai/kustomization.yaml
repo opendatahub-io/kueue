@@ -1,5 +1,13 @@
+<<<<<<< HEAD
 # RHOAI configuration for Kueue.
 
+=======
+<<<<<<< HEAD
+=======
+# RHOAI configuration for Kueue.
+
+>>>>>>> 71be1010 (bind admin roles in Kueue)
+>>>>>>> 665f8c29 (fix git conflict)
 # Adds namespace to all resources.
 namespace: opendatahub
 
@@ -20,7 +28,14 @@ resources:
 - ../components/manager
 - ../components/internalcert
 - ../components/webhook
+<<<<<<< HEAD
 - binding_admin_roles.yaml
+=======
+<<<<<<< HEAD
+=======
+- binding_admin_roles.yaml
+>>>>>>> 71be1010 (bind admin roles in Kueue)
+>>>>>>> 665f8c29 (fix git conflict)
 # [PROMETHEUS] To enable prometheus monitor, uncomment all sections with 'PROMETHEUS'.
 #- ../components/prometheus
 
