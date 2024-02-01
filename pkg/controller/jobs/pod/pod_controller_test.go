@@ -2360,13 +2360,13 @@ func TestReconciler(t *testing.T) {
 			reconcileKey: &types.NamespacedName{Namespace: "ns", Name: "deleted_pod"},
 			workloads: []kueue.Workload{
 				*utiltesting.MakeWorkload("test-group", "ns").
-					OwnerReference("v1", "Pod", "deleted_pod", "", true, true).
+					OwnerReference(corev1.SchemeGroupVersion.WithKind("Pod"), "deleted_pod", "", true, true).
 					Finalizers(kueue.ResourceInUseFinalizerName).
 					Obj(),
 			},
 			wantWorkloads: []kueue.Workload{
 				*utiltesting.MakeWorkload("test-group", "ns").
-					OwnerReference("v1", "Pod", "deleted_pod", "", true, true).
+					OwnerReference(corev1.SchemeGroupVersion.WithKind("Pod"), "deleted_pod", "", true, true).
 					Obj(),
 			},
 			workloadCmpOpts: defaultWorkloadCmpOpts,
@@ -2490,8 +2490,8 @@ func TestReconciler_ErrorFinalizingPod(t *testing.T) {
 		WithStatusSubresource(&wl).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Update: func(ctx context.Context, client client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
-				gvk := obj.GetObjectKind().GroupVersionKind()
-				if gvk.GroupVersion().String() == "v1" && gvk.Kind == "Pod" {
+				_, isPod := obj.(*corev1.Pod)
+				if isPod {
 					defer func() { reqcount++ }()
 					if reqcount == 0 {
 						// return a connection refused error for the first update request.

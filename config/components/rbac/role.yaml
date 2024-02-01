@@ -404,6 +404,22 @@ rules:
 - apiGroups:
   - kueue.x-k8s.io
   resources:
+  - multikueueclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - kueue.x-k8s.io
+  resources:
+  - multikueueclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kueue.x-k8s.io
+  resources:
   - multikueueconfigs
   verbs:
   - get
@@ -475,6 +491,30 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - ray.io
+  resources:
+  - rayclusters
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ray.io
+  resources:
+  - rayclusters/finalizers
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - ray.io
+  resources:
+  - rayclusters/status
+  verbs:
+  - get
+  - update
 - apiGroups:
   - ray.io
   resources:

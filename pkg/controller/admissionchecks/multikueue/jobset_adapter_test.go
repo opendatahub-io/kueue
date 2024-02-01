@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	jobset "sigs.k8s.io/jobset/api/jobset/v1alpha2"
 
+	kueuealpha "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	"sigs.k8s.io/kueue/pkg/controller/constants"
 	"sigs.k8s.io/kueue/pkg/util/slices"
@@ -62,7 +63,7 @@ func TestWlReconcileJobset(t *testing.T) {
 			managersWorkloads: []kueue.Workload{
 				*baseWorkloadBuilder.Clone().
 					AdmissionCheck(kueue.AdmissionCheckState{Name: "ac1", State: kueue.CheckStatePending}).
-					OwnerReference("jobset.x-k8s.io/v1alpha2", "JobSet", "jobset1", "uid1", true, true).
+					OwnerReference(jobset.SchemeGroupVersion.WithKind("JobSet"), "jobset1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Obj(),
 			},
@@ -83,7 +84,7 @@ func TestWlReconcileJobset(t *testing.T) {
 						State:   kueue.CheckStateReady,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("jobset.x-k8s.io/v1alpha2", "JobSet", "jobset1", "uid1", true, true).
+					OwnerReference(jobset.SchemeGroupVersion.WithKind("JobSet"), "jobset1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Obj(),
 			},
@@ -110,7 +111,7 @@ func TestWlReconcileJobset(t *testing.T) {
 						State:   kueue.CheckStateReady,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("jobset.x-k8s.io/v1alpha2", "JobSet", "jobset1", "uid1", true, true).
+					OwnerReference(jobset.SchemeGroupVersion.WithKind("JobSet"), "jobset1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Obj(),
 			},
@@ -139,7 +140,7 @@ func TestWlReconcileJobset(t *testing.T) {
 						State:   kueue.CheckStateReady,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("jobset.x-k8s.io/v1alpha2", "JobSet", "jobset1", "uid1", true, true).
+					OwnerReference(jobset.SchemeGroupVersion.WithKind("JobSet"), "jobset1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Condition(metav1.Condition{Type: kueue.WorkloadFinished, Status: metav1.ConditionTrue, Reason: "ByTest", Message: `From remote "worker1": by test`}).
 					Obj(),
@@ -171,7 +172,7 @@ func TestWlReconcileJobset(t *testing.T) {
 						State:   kueue.CheckStateReady,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("jobset.x-k8s.io/v1alpha2", "JobSet", "jobset1", "uid1", true, true).
+					OwnerReference(jobset.SchemeGroupVersion.WithKind("JobSet"), "jobset1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Condition(metav1.Condition{Type: kueue.WorkloadFinished, Status: metav1.ConditionTrue, Reason: "ByTest", Message: `From remote "worker1": by test`}).
 					Obj(),
@@ -203,7 +204,7 @@ func TestWlReconcileJobset(t *testing.T) {
 						State:   kueue.CheckStateReady,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("jobset.x-k8s.io/v1alpha2", "JobSet", "jobset1", "uid1", true, true).
+					OwnerReference(jobset.SchemeGroupVersion.WithKind("JobSet"), "jobset1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Condition(metav1.Condition{Type: kueue.WorkloadFinished, Status: metav1.ConditionTrue, Reason: "ByTest", Message: `From remote "worker1": by test`}).
 					Obj(),
@@ -223,12 +224,16 @@ func TestWlReconcileJobset(t *testing.T) {
 			manageBuilder = manageBuilder.WithLists(&kueue.WorkloadList{Items: tc.managersWorkloads}, &jobset.JobSetList{Items: tc.managersJobSets})
 			manageBuilder = manageBuilder.WithStatusSubresource(slices.Map(tc.managersWorkloads, func(w *kueue.Workload) client.Object { return w })...)
 			manageBuilder = manageBuilder.WithStatusSubresource(slices.Map(tc.managersJobSets, func(w *jobset.JobSet) client.Object { return w })...)
-			manageBuilder = manageBuilder.WithObjects(utiltesting.MakeAdmissionCheck("ac1").ControllerName(ControllerName).Obj())
+			manageBuilder = manageBuilder.WithObjects(
+				utiltesting.MakeMultiKueueConfig("config1").Clusters("worker1").Obj(),
+				utiltesting.MakeAdmissionCheck("ac1").ControllerName(ControllerName).
+					Parameters(kueuealpha.GroupVersion.Group, "MultiKueueConfig", "config1").
+					Obj(),
+			)
 
 			managerClient := manageBuilder.Build()
-			acr := newACController(managerClient, nil, TestNamespace)
 
-			rc := newRemoteController(ctx, managerClient, nil)
+			cRec := newClustersReconciler(managerClient, TestNamespace)
 
 			worker1Builder, _ := getClientBuilder()
 			worker1Builder = worker1Builder.WithLists(&kueue.WorkloadList{Items: tc.worker1Workloads}, &jobset.JobSetList{Items: tc.worker1JobSets})
@@ -237,13 +242,10 @@ func TestWlReconcileJobset(t *testing.T) {
 			w1remoteClient := newRemoteClient(managerClient, nil)
 			w1remoteClient.client = worker1Client
 
-			rc.remoteClients = map[string]*remoteClient{"worker1": w1remoteClient}
+			cRec.remoteClients["worker1"] = w1remoteClient
 
-			acr.controllers["ac1"] = rc
-
-			reconciler := wlReconciler{
-				acr: acr,
-			}
+			helper, _ := newMultiKueueStoreHelper(managerClient)
+			reconciler := newWlReconciler(managerClient, helper, cRec)
 
 			_, gotErr := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "wl1", Namespace: TestNamespace}})
 			if gotErr != nil {

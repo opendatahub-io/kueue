@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	kueuealpha "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	"sigs.k8s.io/kueue/pkg/controller/constants"
 	"sigs.k8s.io/kueue/pkg/util/slices"
@@ -90,7 +91,7 @@ func TestWlReconcile(t *testing.T) {
 			managersWorkloads: []kueue.Workload{
 				*baseWorkloadBuilder.Clone().
 					AdmissionCheck(kueue.AdmissionCheckState{Name: "ac1", State: kueue.CheckStatePending}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					Obj(),
 			},
 			worker1Workloads: []kueue.Workload{
@@ -99,7 +100,7 @@ func TestWlReconcile(t *testing.T) {
 			wantManagersWorkloads: []kueue.Workload{
 				*baseWorkloadBuilder.Clone().
 					AdmissionCheck(kueue.AdmissionCheckState{Name: "ac1", State: kueue.CheckStatePending}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					Obj(),
 			},
 		},
@@ -108,14 +109,14 @@ func TestWlReconcile(t *testing.T) {
 			managersWorkloads: []kueue.Workload{
 				*baseWorkloadBuilder.Clone().
 					AdmissionCheck(kueue.AdmissionCheckState{Name: "ac1", State: kueue.CheckStatePending}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Obj(),
 			},
 			wantManagersWorkloads: []kueue.Workload{
 				*baseWorkloadBuilder.Clone().
 					AdmissionCheck(kueue.AdmissionCheckState{Name: "ac1", State: kueue.CheckStatePending}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Obj(),
 			},
@@ -128,7 +129,7 @@ func TestWlReconcile(t *testing.T) {
 			managersWorkloads: []kueue.Workload{
 				*baseWorkloadBuilder.Clone().
 					AdmissionCheck(kueue.AdmissionCheckState{Name: "ac1", State: kueue.CheckStatePending}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Obj(),
 			},
@@ -149,7 +150,7 @@ func TestWlReconcile(t *testing.T) {
 						State:   kueue.CheckStatePending,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Obj(),
 			},
@@ -177,7 +178,7 @@ func TestWlReconcile(t *testing.T) {
 						State:   kueue.CheckStatePending,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Obj(),
 			},
@@ -206,7 +207,7 @@ func TestWlReconcile(t *testing.T) {
 						State:   kueue.CheckStatePending,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Condition(metav1.Condition{Type: kueue.WorkloadFinished, Status: metav1.ConditionTrue, Reason: "ByTest", Message: `From remote "worker1": by test`}).
 					Obj(),
@@ -239,7 +240,7 @@ func TestWlReconcile(t *testing.T) {
 						State:   kueue.CheckStatePending,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Condition(metav1.Condition{Type: kueue.WorkloadFinished, Status: metav1.ConditionTrue, Reason: "ByTest", Message: `From remote "worker1": by test`}).
 					Obj(),
@@ -271,7 +272,7 @@ func TestWlReconcile(t *testing.T) {
 						State:   kueue.CheckStatePending,
 						Message: `The workload got reservation on "worker1"`,
 					}).
-					OwnerReference("batch/v1", "Job", "job1", "uid1", true, true).
+					OwnerReference(batchv1.SchemeGroupVersion.WithKind("Job"), "job1", "uid1", true, true).
 					ReserveQuota(utiltesting.MakeAdmission("q1").Obj()).
 					Condition(metav1.Condition{Type: kueue.WorkloadFinished, Status: metav1.ConditionTrue, Reason: "ByTest", Message: `From remote "worker1": by test`}).
 					Obj(),
@@ -291,12 +292,16 @@ func TestWlReconcile(t *testing.T) {
 			manageBuilder = manageBuilder.WithLists(&kueue.WorkloadList{Items: tc.managersWorkloads}, &batchv1.JobList{Items: tc.managersJobs})
 			manageBuilder = manageBuilder.WithStatusSubresource(slices.Map(tc.managersWorkloads, func(w *kueue.Workload) client.Object { return w })...)
 			manageBuilder = manageBuilder.WithStatusSubresource(slices.Map(tc.managersJobs, func(w *batchv1.Job) client.Object { return w })...)
-			manageBuilder = manageBuilder.WithObjects(utiltesting.MakeAdmissionCheck("ac1").ControllerName(ControllerName).Obj())
+			manageBuilder = manageBuilder.WithObjects(
+				utiltesting.MakeMultiKueueConfig("config1").Clusters("worker1").Obj(),
+				utiltesting.MakeAdmissionCheck("ac1").ControllerName(ControllerName).
+					Parameters(kueuealpha.GroupVersion.Group, "MultiKueueConfig", "config1").
+					Obj(),
+			)
 
 			managerClient := manageBuilder.Build()
-			acr := newACController(managerClient, nil, TestNamespace)
 
-			rc := newRemoteController(ctx, managerClient, nil)
+			cRec := newClustersReconciler(managerClient, TestNamespace)
 
 			worker1Builder, _ := getClientBuilder()
 			worker1Builder = worker1Builder.WithLists(&kueue.WorkloadList{Items: tc.worker1Workloads}, &batchv1.JobList{Items: tc.worker1Jobs})
@@ -304,14 +309,10 @@ func TestWlReconcile(t *testing.T) {
 
 			w1remoteClient := newRemoteClient(managerClient, nil)
 			w1remoteClient.client = worker1Client
+			cRec.remoteClients["worker1"] = w1remoteClient
 
-			rc.remoteClients = map[string]*remoteClient{"worker1": w1remoteClient}
-
-			acr.controllers["ac1"] = rc
-
-			reconciler := wlReconciler{
-				acr: acr,
-			}
+			helper, _ := newMultiKueueStoreHelper(managerClient)
+			reconciler := newWlReconciler(managerClient, helper, cRec)
 
 			_, gotErr := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: tc.reconcileFor, Namespace: TestNamespace}})
 			if diff := cmp.Diff(tc.wantError, gotErr, cmpopts.EquateErrors()); diff != "" {

@@ -42,11 +42,12 @@ const (
 
 func init() {
 	utilruntime.Must(jobframework.RegisterIntegration(FrameworkName, jobframework.IntegrationCallbacks{
-		SetupIndexes:  SetupIndexes,
-		NewReconciler: NewReconciler,
-		SetupWebhook:  SetupRayJobWebhook,
-		JobType:       &rayjobapi.RayJob{},
-		AddToScheme:   rayjobapi.AddToScheme,
+		SetupIndexes:           SetupIndexes,
+		NewReconciler:          NewReconciler,
+		SetupWebhook:           SetupRayJobWebhook,
+		JobType:                &rayjobapi.RayJob{},
+		AddToScheme:            rayjobapi.AddToScheme,
+		IsManagingObjectsOwner: isRayJob,
 	}))
 }
 
@@ -179,4 +180,8 @@ func SetupIndexes(ctx context.Context, indexer client.FieldIndexer) error {
 
 func GetWorkloadNameForRayJob(jobName string) string {
 	return jobframework.GetWorkloadNameForOwnerWithGVK(jobName, gvk)
+}
+
+func isRayJob(owner *metav1.OwnerReference) bool {
+	return owner.Kind == "RayJob" && (strings.HasPrefix(owner.APIVersion, "ray.io/v1alpha1") || strings.HasPrefix(owner.APIVersion, "ray.io/v1"))
 }
