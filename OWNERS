@@ -1,17 +1,23 @@
 # See the OWNERS docs at https://go.k8s.io/owners
 
 approvers:
-- alculquicondor
-- tenzen-y
+- anishasthana
+- astefanutti
+- jbusche
+- kpostoffice
+- maxusmusti
+- sutaakar
+- tedhtchang
 
 reviewers:
-- alculquicondor
-- denkensk
-- kerthcet
-- mimowo
-- tenzen-y
-- trasc
-
-emeritus_approvers:
-- ahg-g
-- denkensk
+- anishasthana
+- astefanutti
+- ChristianZaccaria
+- dimakis
+- Fiona-Waters
+- jbusche
+- kpostoffice
+- maxusmusti
+- MichaelClifford
+- sutaakar
+- tedhtchang
