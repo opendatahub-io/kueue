@@ -22,6 +22,22 @@ import (
 	visibilityv1alpha1 "sigs.k8s.io/kueue/client-go/clientset/versioned/typed/visibility/v1alpha1"
 )
 
+const (
+	// The environment variable for namespace where Kueue is installed
+	namespaceEnvVar = "NAMESPACE"
+
+	// The namespace where kueue is installed in opendatahub
+	odhNamespace = "opendatahub"
+
+	// The namespace where kueue is installed in rhoai
+	rhoaiNamespace = "redhat-ods-applications"
+
+	// The default namespace where kueue is installed
+	kueueNamespace = "kueue-system"
+
+	undefinedNamespace = "undefined"
+)
+
 func CreateClientUsingCluster(kContext string) client.WithWatch {
 	cfg, err := config.GetConfigWithContext(kContext)
 	if err != nil {
@@ -70,14 +86,14 @@ func CreateVisibilityClient(user string) visibilityv1alpha1.VisibilityV1alpha1In
 
 func WaitForKueueAvailability(ctx context.Context, k8sClient client.Client) {
 	kcmKey := types.NamespacedName{
-		Namespace: "kueue-system",
+		Namespace: GetNamespace(),
 		Name:      "kueue-controller-manager",
 	}
 	deployment := &appsv1.Deployment{}
 	pods := corev1.PodList{}
 	gomega.EventuallyWithOffset(1, func(g gomega.Gomega) error {
 		g.Expect(k8sClient.Get(ctx, kcmKey, deployment)).To(gomega.Succeed())
-		g.Expect(k8sClient.List(ctx, &pods, client.InNamespace("kueue-system"), client.MatchingLabels(deployment.Spec.Selector.MatchLabels))).To(gomega.Succeed())
+		g.Expect(k8sClient.List(ctx, &pods, client.InNamespace(GetNamespace()), client.MatchingLabels(deployment.Spec.Selector.MatchLabels))).To(gomega.Succeed())
 		for _, pod := range pods.Items {
 			for _, cs := range pod.Status.ContainerStatuses {
 				if cs.RestartCount > 0 {
@@ -94,4 +110,24 @@ func WaitForKueueAvailability(ctx context.Context, k8sClient client.Client) {
 		return nil
 
 	}, StartUpTimeout, Interval).Should(gomega.Succeed())
+}
+
+func GetNamespace() string {
+	namespace, ok := os.LookupEnv(namespaceEnvVar)
+	if !ok {
+		fmt.Printf("Expected environment variable %s is unset, please use this environment variable to specify in which namespace Kueue is installed", namespaceEnvVar)
+		os.Exit(1)
+	}
+	switch namespace {
+	case "opendatahub":
+		return odhNamespace
+	case "redhat-ods-applications":
+		return rhoaiNamespace
+	case "kueue-system":
+		return kueueNamespace
+	default:
+		fmt.Printf("Expected environment variable %s contains an incorrect value", namespaceEnvVar)
+		os.Exit(1)
+		return undefinedNamespace
+	}
 }
