@@ -21,16 +21,10 @@ controller:
 clientConnection:
   qps: 50
   burst: 100
-#pprofBindAddress: :8083
-#waitForPodsReady:
-#  enable: false
-#  timeout: 5m
-#  blockAdmission: false
-#  requeuingStrategy:
-#    timestamp: Eviction
-#    backoffLimitCount: null # null indicates infinite requeuing
-#    backoffBaseSeconds: 60
-#    backoffMaxSeconds: 3600
+#pprofBindAddress: :8082
+waitForPodsReady:
+  enable: true
+  blockAdmission: false
 #manageJobsWithoutQueueName: true
 #internalCertManagement:
 #  enable: false
@@ -48,17 +42,10 @@ integrations:
   - "kubeflow.org/pytorchjob"
   - "kubeflow.org/tfjob"
   - "kubeflow.org/xgboostjob"
-#  - "pod"
-#  externalFrameworks:
-#  - "Foo.v1.example.com"
-#  podOptions:
-#    namespaceSelector:
-#      matchExpressions:
-#        - key: kubernetes.io/metadata.name
-#          operator: NotIn
-#          values: [ kube-system, kueue-system ]
-#fairSharing:
-#  enable: true
-#  preemptionStrategies: [LessThanOrEqualToFinalShare, LessThanInitialShare]
-#resources:
-#  excludeResourcePrefixes: []
+# - "pod"
+# podOptions:
+#   namespaceSelector:
+#     matchExpressions:
+#       - key: kubernetes.io/metadata.name
+#         operator: NotIn
+#         values: [ kube-system, kueue-system ]
