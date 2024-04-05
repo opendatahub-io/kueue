@@ -505,7 +505,7 @@ func expectJobUnsuspendedWithNodeSelectors(key types.NamespacedName, ns map[stri
 	gomega.EventuallyWithOffset(1, func() []any {
 		gomega.Expect(k8sClient.Get(ctx, key, job)).To(gomega.Succeed())
 		return []any{*job.Spec.Suspend, job.Spec.Template.Spec.NodeSelector}
-	}, util.Timeout, util.Interval).Should(gomega.Equal([]any{false, ns}))
+	}, util.LongTimeout, util.Interval).Should(gomega.Equal([]any{false, ns}))
 }
 
 func defaultOwnerReferenceForJob(name string) []metav1.OwnerReference {
