@@ -22,8 +22,9 @@ clientConnection:
   qps: 50
   burst: 100
 #pprofBindAddress: :8082
-#waitForPodsReady:
-#  enable: true
+waitForPodsReady:
+  enable: true
+  blockAdmission: false
 #manageJobsWithoutQueueName: true
 #internalCertManagement:
 #  enable: false
