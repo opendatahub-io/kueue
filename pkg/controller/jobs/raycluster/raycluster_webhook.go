@@ -95,10 +95,13 @@ func (w *RayClusterWebhook) ValidateCreate(ctx context.Context, obj runtime.Obje
 func (w *RayClusterWebhook) validateCreate(job *rayv1.RayCluster) field.ErrorList {
 	var allErrors field.ErrorList
 	kueueJob := (*RayCluster)(job)
+	specPath := field.NewPath("spec")
+	if job.Spec.HeadGroupSpec.EnableIngress == nil || *job.Spec.HeadGroupSpec.EnableIngress {
+		allErrors = append(allErrors, field.Invalid(specPath.Child("headGroupSpec").Child("enableIngress"), job.Spec.HeadGroupSpec.EnableIngress, "creating RayCluster resources with EnableIngress set to true or unspecified is not allowed"))
+	}
 
 	if w.manageJobsWithoutQueueName || jobframework.QueueName(kueueJob) != "" {
 		spec := &job.Spec
-		specPath := field.NewPath("spec")
 
 		// TODO revisit once Support dynamically sized (elastic) jobs #77 is implemented
 		// Should not use auto scaler. Once the resources are reserved by queue the cluster should do it's best to use them.
