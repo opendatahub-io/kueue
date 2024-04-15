@@ -24,6 +24,7 @@ clientConnection:
 #pprofBindAddress: :8082
 waitForPodsReady:
   enable: true
+  blockAdmission: false
 #manageJobsWithoutQueueName: true
 #internalCertManagement:
 #  enable: false
