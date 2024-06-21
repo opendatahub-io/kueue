@@ -1,6 +1,10 @@
 module sigs.k8s.io/kueue
 
+<<<<<<< HEAD
 go 1.23.0
+=======
+go 1.22.2
+>>>>>>> e86512d5 (PATCH: Use previous Go 1.22.2 version for compatibility purposes)
 
 require (
 	github.com/fsnotify/fsnotify v1.8.0
