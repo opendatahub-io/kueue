@@ -105,8 +105,8 @@ managerConfig:
       - "kubeflow.org/tfjob"
       - "kubeflow.org/xgboostjob"
     #  - "pod"
-    #  externalFrameworks:
-    #  - "Foo.v1.example.com"
+      externalFrameworks:
+      - "AppWrapper.v1beta2.workload.codeflare.dev"
     #  podOptions:
     #    namespaceSelector:
     #      matchExpressions:

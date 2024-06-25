@@ -43,6 +43,8 @@ integrations:
   - "kubeflow.org/tfjob"
   - "kubeflow.org/xgboostjob"
 # - "pod"
+  externalFrameworks:
+  - "AppWrapper.v1beta2.workload.codeflare.dev"
 # podOptions:
 #   namespaceSelector:
 #     matchExpressions:
