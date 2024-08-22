@@ -101,7 +101,7 @@ func waitForOperatorAvailability(ctx context.Context, k8sClient client.Client, k
 				}
 			}
 		}
-		// To verify that webhooks are ready, checking is deployment have condition Available=True.
+		// To verify that webhooks are ready, checking is deployment have condition Available=True.s
 		g.Expect(deployment.Status.Conditions).To(gomega.ContainElement(gomega.BeComparableTo(
 			appsv1.DeploymentCondition{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue},
 			cmpopts.IgnoreFields(appsv1.DeploymentCondition{}, "Reason", "Message", "LastUpdateTime", "LastTransitionTime")),
