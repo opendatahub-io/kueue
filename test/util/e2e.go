@@ -42,7 +42,7 @@ const (
 func CreateClientUsingCluster(kContext string) (client.WithWatch, *rest.Config) {
 	cfg, err := config.GetConfigWithContext(kContext)
 	if err != nil {
-		fmt.Printf("unable to get kubeconfig for context %q: %s", kContext, err)
+		fmt.Printf("unable to get kubeconfig for contexts %q: %s", kContext, err)
 		os.Exit(1)
 	}
 	gomega.ExpectWithOffset(1, cfg).NotTo(gomega.BeNil())
@@ -101,7 +101,7 @@ func waitForOperatorAvailability(ctx context.Context, k8sClient client.Client, k
 				}
 			}
 		}
-		// To verify that webhooks are ready, checking is deployment have condition Available=True.s
+		// To verify that webhooks are ready, checking is deployment have condition Available=True.
 		g.Expect(deployment.Status.Conditions).To(gomega.ContainElement(gomega.BeComparableTo(
 			appsv1.DeploymentCondition{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue},
 			cmpopts.IgnoreFields(appsv1.DeploymentCondition{}, "Reason", "Message", "LastUpdateTime", "LastTransitionTime")),
