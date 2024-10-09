@@ -120,8 +120,11 @@ func WaitForKueueAvailability(ctx context.Context, k8sClient client.Client) {
 }
 
 func WaitForJobSetAvailability(ctx context.Context, k8sClient client.Client) {
-	jcmKey := types.NamespacedName{Namespace: "jobset-system", Name: "jobset-controller-manager"}
-	waitForOperatorAvailability(ctx, k8sClient, jcmKey)
+	_, skipJobsetAvailabilityCheck := os.LookupEnv("SKIP_JOB_SET_AVAILABILITY_CHECK")
+	if !skipJobsetAvailabilityCheck {
+		jcmKey := types.NamespacedName{Namespace: "jobset-system", Name: "jobset-controller-manager"}
+		waitForOperatorAvailability(ctx, k8sClient, jcmKey)
+	}
 }
 
 func WaitForKubeFlowTrainingOperatorAvailability(ctx context.Context, k8sClient client.Client) {
