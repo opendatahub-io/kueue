@@ -105,8 +105,11 @@ func WaitForKueueAvailability(ctx context.Context, k8sClient client.Client) {
 }
 
 func WaitForJobSetAvailability(ctx context.Context, k8sClient client.Client) {
-	kcmKey := types.NamespacedName{Namespace: "jobset-system", Name: "jobset-controller-manager"}
-	waitForOperatorAvailability(ctx, k8sClient, kcmKey)
+	_, skipJobsetAvailabilityCheck := os.LookupEnv("SKIP_JOB_SET_AVAILABILITY_CHECK")
+	if !skipJobsetAvailabilityCheck {
+		kcmKey := types.NamespacedName{Namespace: "jobset-system", Name: "jobset-controller-manager"}
+		waitForOperatorAvailability(ctx, k8sClient, kcmKey)
+	}
 }
 
 func GetNamespace() string {
