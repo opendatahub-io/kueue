@@ -101,6 +101,10 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 		gomega.Expect(k8sClient.Create(ctx, ns)).To(gomega.Succeed())
 	})
 
+	ginkgo.BeforeEach(func() {
+		gomega.Expect(features.SetEnable(features.LocalQueueMetrics, true)).To(gomega.Succeed())
+	})
+
 	ginkgo.AfterEach(func() {
 		gomega.Expect(util.DeleteNamespace(ctx, k8sClient, ns)).To(gomega.Succeed())
 	})
@@ -208,6 +212,8 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 			// Workloads are inadmissible because ResourceFlavors don't exist here yet.
 			util.ExpectPendingWorkloadsMetric(clusterQueue, 0, 5)
 			util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 0)
+			util.ExpectLQPendingWorkloadsMetric(localQueue, 0, 5)
+			util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 0)
 
 			ginkgo.By("Creating ResourceFlavors")
 			onDemandFlavor = testing.MakeResourceFlavor(flavorOnDemand).Obj()
@@ -297,6 +303,8 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 			}, util.IgnoreConditionTimestampsAndObservedGeneration, ignorePendingWorkloadsStatus))
 			util.ExpectPendingWorkloadsMetric(clusterQueue, 1, 0)
 			util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 4)
+			util.ExpectLQPendingWorkloadsMetric(localQueue, 1, 0)
+			util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 4)
 
 			ginkgo.By("Checking the resource reservation metrics are updated", func() {
 				util.ExpectCQResourceReservations(clusterQueue, flavorOnDemand, string(corev1.ResourceCPU), 6)
@@ -331,6 +339,8 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 			}, util.IgnoreConditionTimestampsAndObservedGeneration, ignorePendingWorkloadsStatus))
 			util.ExpectPendingWorkloadsMetric(clusterQueue, 1, 0)
 			util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 4)
+			util.ExpectLQPendingWorkloadsMetric(localQueue, 1, 0)
+			util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 4)
 
 			ginkgo.By("Checking the resource usage metrics are updated", func() {
 				util.ExpectCQResourceReservations(clusterQueue, flavorOnDemand, string(corev1.ResourceCPU), 6)
@@ -359,6 +369,8 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 			}, util.IgnoreConditionTimestampsAndObservedGeneration, ignorePendingWorkloadsStatus))
 			util.ExpectPendingWorkloadsMetric(clusterQueue, 0, 0)
 			util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 0)
+			util.ExpectLQPendingWorkloadsMetric(localQueue, 0, 0)
+			util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 0)
 		})
 
 		ginkgo.It("Should update status and report metrics when a pending workload is deleted", func() {
@@ -391,6 +403,8 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 
 			util.ExpectPendingWorkloadsMetric(clusterQueue, 0, 1)
 			util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 0)
+			util.ExpectLQPendingWorkloadsMetric(localQueue, 0, 1)
+			util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 0)
 
 			ginkgo.By("Deleting the pending workload", func() {
 				gomega.Expect(k8sClient.Delete(ctx, workload)).To(gomega.Succeed())
@@ -416,6 +430,8 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 			}, util.IgnoreConditionTimestampsAndObservedGeneration, ignorePendingWorkloadsStatus))
 			util.ExpectPendingWorkloadsMetric(clusterQueue, 0, 0)
 			util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 0)
+			util.ExpectLQPendingWorkloadsMetric(localQueue, 0, 0)
+			util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 0)
 		})
 
 		ginkgo.It("Should update status when workloads have reclaimable pods", func() {
@@ -444,6 +460,7 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 			ginkgo.By("Creating the workload", func() {
 				gomega.Expect(k8sClient.Create(ctx, wl)).To(gomega.Succeed())
 				util.ExpectPendingWorkloadsMetric(clusterQueue, 1, 0)
+				util.ExpectLQPendingWorkloadsMetric(localQueue, 1, 0)
 			})
 
 			ginkgo.By("Admitting the workload", func() {
@@ -478,6 +495,7 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 			})
 
 			util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 1)
+			util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 1)
 			gomega.Eventually(func() []kueue.FlavorUsage {
 				var updatedCq kueue.ClusterQueue
 				gomega.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(clusterQueue), &updatedCq)).To(gomega.Succeed())
@@ -513,7 +531,6 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 
 			ginkgo.By("Mark two workers as reclaimable", func() {
 				gomega.Expect(workload.UpdateReclaimablePods(ctx, k8sClient, wl, []kueue.ReclaimablePod{{Name: "workers", Count: 2}})).To(gomega.Succeed())
-
 				util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 1)
 				gomega.Eventually(func() []kueue.FlavorUsage {
 					var updatedCq kueue.ClusterQueue
@@ -548,11 +565,50 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 					},
 				}, util.IgnoreConditionTimestamps))
 			})
+			ginkgo.By("Mark two workers as reclaimable", func() {
+				gomega.Expect(workload.UpdateReclaimablePods(ctx, k8sClient, wl, []kueue.ReclaimablePod{{Name: "workers", Count: 2}})).To(gomega.Succeed())
+
+				util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 1)
+				util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 1)
+				gomega.Eventually(func(g gomega.Gomega) {
+					var updatedCq kueue.ClusterQueue
+					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(clusterQueue), &updatedCq)).To(gomega.Succeed())
+					g.Expect(updatedCq.Status.FlavorsReservation).Should(gomega.BeComparableTo([]kueue.FlavorUsage{
+						{
+							Name: flavorOnDemand,
+							Resources: []kueue.ResourceUsage{{
+								Name:  corev1.ResourceCPU,
+								Total: resource.MustParse("2"),
+							}},
+						},
+						{
+							Name: flavorSpot,
+							Resources: []kueue.ResourceUsage{{
+								Name: corev1.ResourceCPU,
+							}},
+						},
+						{
+							Name: flavorModelA,
+							Resources: []kueue.ResourceUsage{{
+								Name:  resourceGPU,
+								Total: resource.MustParse("3"),
+							}},
+						},
+						{
+							Name: flavorModelB,
+							Resources: []kueue.ResourceUsage{{
+								Name: resourceGPU,
+							}},
+						},
+					}, util.IgnoreConditionTimestamps))
+				}, util.Timeout, util.Interval).Should(gomega.Succeed())
+			})
 
 			ginkgo.By("Mark all workers and a driver as reclaimable", func() {
 				gomega.Expect(workload.UpdateReclaimablePods(ctx, k8sClient, wl, []kueue.ReclaimablePod{{Name: "workers", Count: 5}, {Name: "driver", Count: 1}})).To(gomega.Succeed())
 
 				util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 1)
+				util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 1)
 				gomega.Eventually(func() []kueue.FlavorUsage {
 					var updatedCq kueue.ClusterQueue
 					gomega.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(clusterQueue), &updatedCq)).To(gomega.Succeed())
@@ -590,6 +646,8 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 				util.FinishWorkloads(ctx, k8sClient, wl)
 				util.ExpectPendingWorkloadsMetric(clusterQueue, 0, 0)
 				util.ExpectReservingActiveWorkloadsMetric(clusterQueue, 0)
+				util.ExpectLQPendingWorkloadsMetric(localQueue, 0, 0)
+				util.ExpectLQReservingActiveWorkloadsMetric(localQueue, 0)
 			})
 		})
 	})
@@ -789,6 +847,7 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 		ginkgo.It("Should be stuck in termination until admitted workloads finished running", func() {
 			util.SetAdmissionCheckActive(ctx, k8sClient, check, metav1.ConditionTrue)
 			util.ExpectClusterQueueStatusMetric(cq, metrics.CQStatusActive)
+			util.ExpectLQByStatusMetric(lq, metav1.ConditionTrue)
 
 			ginkgo.By("Admit workload")
 			wl := testing.MakeWorkload("workload", ns.Name).Queue(lq.Name).Obj()
@@ -805,6 +864,7 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 			ginkgo.By("Delete clusterQueue")
 			gomega.Expect(util.DeleteObject(ctx, k8sClient, cq)).To(gomega.Succeed())
 			util.ExpectClusterQueueStatusMetric(cq, metrics.CQStatusTerminating)
+			util.ExpectLQByStatusMetric(lq, metav1.ConditionTrue)
 			var newCQ kueue.ClusterQueue
 			gomega.Eventually(func() []string {
 				gomega.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cq), &newCQ)).To(gomega.Succeed())
@@ -816,11 +876,13 @@ var _ = ginkgo.Describe("ClusterQueue controller", ginkgo.Ordered, ginkgo.Contin
 
 			ginkgo.By("The clusterQueue will be deleted")
 			util.ExpectObjectToBeDeleted(ctx, k8sClient, cq, false)
+			util.ExpectLQByStatusMetric(lq, metav1.ConditionFalse)
 		})
 
 		ginkgo.It("Should delete the cluster without waiting for reserving only workloads to finish", func() {
 			util.SetAdmissionCheckActive(ctx, k8sClient, check, metav1.ConditionTrue)
 			util.ExpectClusterQueueStatusMetric(cq, metrics.CQStatusActive)
+			util.ExpectLQByStatusMetric(lq, metav1.ConditionTrue)
 
 			ginkgo.By("Setting quota reservation")
 			wl := testing.MakeWorkload("workload", ns.Name).Queue(lq.Name).Obj()

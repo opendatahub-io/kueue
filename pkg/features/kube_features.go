@@ -105,6 +105,12 @@ const (
 	// Enable the Flavors status field in the LocalQueue, allowing users to view
 	// all currently available ResourceFlavors in the LocalQueue.
 	ExposeFlavorsInLocalQueue featuregate.Feature = "ExposeFlavorsInLocalQueue"
+
+	// owner: @kpostoffice
+	// alpha: v0.10
+	//
+	// Enabled gathering of LocalQueue metrics
+	LocalQueueMetrics featuregate.Feature = "LocalQueueMetrics"
 )
 
 func init() {
@@ -129,6 +135,7 @@ var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	MultiKueueBatchJobWithManagedBy: {Default: false, PreRelease: featuregate.Alpha},
 	MultiplePreemptions:             {Default: false, PreRelease: featuregate.Alpha},
 	ExposeFlavorsInLocalQueue:       {Default: true, PreRelease: featuregate.Beta},
+	LocalQueueMetrics:               {Default: false, PreRelease: featuregate.Alpha},
 }
 
 func SetFeatureGateDuringTest(tb testing.TB, f featuregate.Feature, value bool) func() {
