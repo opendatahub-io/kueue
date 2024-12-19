@@ -20,7 +20,6 @@ set -o pipefail
 
 SOURCE_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 ROOT_DIR="$SOURCE_DIR/.."
-export E2E_TEST_IMAGE=gcr.io/k8s-staging-perf-tests/sleep:v0.1.0
 export MANAGER_KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME}-manager
 export WORKER1_KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME}-worker1
 export WORKER2_KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME}-worker2
@@ -65,20 +64,18 @@ function startup {
 }
 
 function kind_load {
+    prepare_docker_images
     if [ $CREATE_KIND_CLUSTER == 'true' ]
     then
-        docker pull $E2E_TEST_IMAGE
         cluster_kind_load $MANAGER_KIND_CLUSTER_NAME
         cluster_kind_load $WORKER1_KIND_CLUSTER_NAME
         cluster_kind_load $WORKER2_KIND_CLUSTER_NAME 
-
+    fi
 
     # JOBSET SETUP
-    docker pull registry.k8s.io/jobset/jobset:$JOBSET_VERSION
     install_jobset $MANAGER_KIND_CLUSTER_NAME
     install_jobset $WORKER1_KIND_CLUSTER_NAME
     install_jobset $WORKER2_KIND_CLUSTER_NAME
-    fi
 }
 
 function kueue_deploy {
