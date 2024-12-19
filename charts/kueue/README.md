@@ -3,12 +3,14 @@
 ## Table of Contents
 
 <!-- toc -->
-- [Installation](#installation)
-  - [Prerequisites](#prerequisites)
-  - [Installing the chart](#installing-the-chart)
-    - [Install chart using Helm v3.0+](#install-chart-using-helm-v30)
-    - [Verify that controller pods are running properly.](#verify-that-controller-pods-are-running-properly)
-  - [Configuration](#configuration)
+- [Kueue's helm chart](#kueues-helm-chart)
+  - [Table of Contents](#table-of-contents)
+    - [Installation](#installation)
+      - [Prerequisites](#prerequisites)
+      - [Installing the chart](#installing-the-chart)
+        - [Install chart using Helm v3.0+](#install-chart-using-helm-v30)
+        - [Verify that controller pods are running properly.](#verify-that-controller-pods-are-running-properly)
+    - [Configuration](#configuration)
 <!-- /toc -->
 
 ### Installation
@@ -56,10 +58,7 @@ The following table lists the configurable parameters of the kueue chart and the
 | `fullnameOverride`                                     | override the resource name                             | ``                                          |
 | `enablePrometheus`                                     | enable Prometheus                                      | `false`                                     |
 | `enableCertManager`                                    | enable CertManager                                     | `false`                                     |
-| `enableVisibilityAPF`                                  | enable APF for the visibility API                      | `false`                                     |
-| `controllerManager.kubeRbacProxy.image`                | controllerManager.kubeRbacProxy's image                | `registry.k8s.io/kubebuilder/kube-rbac-proxy:v0.8.0` |
-| `controllerManager.manager.image.repository`           | controllerManager.manager's repository and image       | `us-central1-docker.pkg.dev/k8s-staging-images/kueue/kueue` |
-| `controllerManager.manager.image.tag`                  | controllerManager.manager's tag                        | `main`                                      |
+| `controllerManager.manager.image`                      | controllerManager.manager's image                      | `us-central1-docker.pkg.dev/k8s-staging-images/kueue/kueue:main`       |
 | `controllerManager.manager.resources`                  | controllerManager.manager's resources                  | abbr.                                       |
 | `controllerManager.replicas`                           | ControllerManager's replicaCount                       | `1`                                         |
 | `controllerManager.imagePullSecrets`                   | ControllerManager's imagePullSecrets                   | `[]`                                        |

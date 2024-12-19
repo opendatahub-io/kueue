@@ -46,6 +46,9 @@ const (
 	kueueNamespace = "kueue-system"
 
 	undefinedNamespace = "undefined"
+
+	// E2eTTestCurlImage is the image used for testing with curl execution.
+	E2eTTestCurlImage = "curlimages/curl:8.11.0@sha256:6324a8b41a7f9d80db93c7cf65f025411f55956c6b248037738df3bfca32410c"
 )
 
 func CreateClientUsingCluster(kContext string) (client.WithWatch, *rest.Config) {

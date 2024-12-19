@@ -48,20 +48,11 @@ function startup {
 
 function kind_load {
     prepare_docker_images
-
-    if [ "$CREATE_KIND_CLUSTER" == 'true' ]; then
-	      cluster_kind_load "$KIND_CLUSTER_NAME"
+    if [ $CREATE_KIND_CLUSTER == 'true' ]
+    then
+	cluster_kind_load $KIND_CLUSTER_NAME
     fi
-
-    if [[ -n ${JOBSET_VERSION:-} ]]; then
-        install_jobset "$KIND_CLUSTER_NAME"
-    fi
-    if [[ -n ${KUBEFLOW_VERSION:-} ]]; then
-        install_kubeflow "$KIND_CLUSTER_NAME"
-    fi
-    if [[ -n ${KUBEFLOW_MPI_VERSION:-} ]]; then
-        install_mpi "$KIND_CLUSTER_NAME"
-    fi
+    install_jobset $KIND_CLUSTER_NAME
 }
 
 function kueue_deploy {

@@ -70,40 +70,17 @@ function startup {
 
 function kind_load {
     prepare_docker_images
-
-    if [ "$CREATE_KIND_CLUSTER" == 'true' ]
+    if [ $CREATE_KIND_CLUSTER == 'true' ]
     then
-        cluster_kind_load "$MANAGER_KIND_CLUSTER_NAME"
-        cluster_kind_load "$WORKER1_KIND_CLUSTER_NAME"
-        cluster_kind_load "$WORKER2_KIND_CLUSTER_NAME"
+        cluster_kind_load $MANAGER_KIND_CLUSTER_NAME
+        cluster_kind_load $WORKER1_KIND_CLUSTER_NAME
+        cluster_kind_load $WORKER2_KIND_CLUSTER_NAME 
     fi
 
     # JOBSET SETUP
-    install_jobset "$MANAGER_KIND_CLUSTER_NAME"
-    install_jobset "$WORKER1_KIND_CLUSTER_NAME"
-    install_jobset "$WORKER2_KIND_CLUSTER_NAME"
-
-    # KUBEFLOW SETUP
-    # In order for MPI-operator and Training-operator to work on the same cluster it is required that:
-    # 1. 'kubeflow.org_mpijobs.yaml' is removed from base/crds/kustomization.yaml - https://github.com/kubeflow/training-operator/issues/1930
-    # 2. Training-operator deployment is modified to enable all kubeflow jobs except for mpi -  https://github.com/kubeflow/training-operator/issues/1777
-   
-    # Modify the `newTag` for the `kubeflow/training-operator` to use the one training-operator version
-    $YQ eval '(.images[] | select(.name == "kubeflow/training-operator").newTag) = env(KUBEFLOW_IMAGE_VERSION)' -i "$KUBEFLOW_MANIFEST_MANAGER/kustomization.yaml"
-    # MANAGER
-    # Only install the CRDs and not the controller to be able to
-    # have Kubeflow Jobs admitted without execution in the manager cluster.
-    kubectl config use-context "kind-${MANAGER_KIND_CLUSTER_NAME}"
-    kubectl apply -k "${KUBEFLOW_MANIFEST_MANAGER}"
-
-    # WORKERS
-    install_kubeflow "$WORKER1_KIND_CLUSTER_NAME"
-    install_kubeflow "$WORKER2_KIND_CLUSTER_NAME"
-    
-     ## MPI
-    install_mpi "$MANAGER_KIND_CLUSTER_NAME"
-    install_mpi "$WORKER1_KIND_CLUSTER_NAME"
-    install_mpi "$WORKER2_KIND_CLUSTER_NAME"
+    install_jobset $MANAGER_KIND_CLUSTER_NAME
+    install_jobset $WORKER1_KIND_CLUSTER_NAME
+    install_jobset $WORKER2_KIND_CLUSTER_NAME
 }
 
 function kueue_deploy {
