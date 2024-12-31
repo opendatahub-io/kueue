@@ -144,7 +144,7 @@ func main() {
 
 	features.LogFeatureGates(setupLog)
 
-	options, cfg, err := apply(configFile)
+	options, cfg, err = apply(configFile)
 	if err != nil {
 		setupLog.Error(err, "Unable to load the configuration")
 		os.Exit(1)
