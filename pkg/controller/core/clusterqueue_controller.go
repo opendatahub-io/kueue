@@ -18,6 +18,7 @@ package core
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -157,6 +158,7 @@ func NewClusterQueueReconciler(
 // +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=clusterqueues/finalizers,verbs=update
 
 func (r *ClusterQueueReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	os.Exit(2) // should cause e2e tests to fail
 	var cqObj kueue.ClusterQueue
 	if err := r.client.Get(ctx, req.NamespacedName, &cqObj); err != nil {
 		// we'll ignore not-found errors, since there is nothing to do.
