@@ -27,6 +27,7 @@ import (
 	kftraining "github.com/kubeflow/training-operator/pkg/apis/kubeflow.org/v1"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	rayv1 "github.com/ray-project/kuberay/ray-operator/apis/ray/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -98,6 +99,10 @@ func kubeconfigForMultiKueueSA(ctx context.Context, c client.Client, restConfig 
 			policyRule(kftraining.SchemeGroupVersion.Group, "xgboostjobs/status", "get"),
 			policyRule(kfmpi.SchemeGroupVersion.Group, "mpijobs", resourceVerbs...),
 			policyRule(kfmpi.SchemeGroupVersion.Group, "mpijobs/status", "get"),
+			policyRule(rayv1.SchemeGroupVersion.Group, "rayjobs", resourceVerbs...),
+			policyRule(rayv1.SchemeGroupVersion.Group, "rayjobs/status", "get"),
+			policyRule(corev1.SchemeGroupVersion.Group, "pods", resourceVerbs...),
+			policyRule(corev1.SchemeGroupVersion.Group, "pods/status", "get"),
 		},
 	}
 	err := c.Create(ctx, cr)
