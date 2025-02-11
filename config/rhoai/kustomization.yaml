@@ -15,6 +15,9 @@ configMapGenerator:
   envs:
     - params.env
 
+sortOptions:
+  order: legacy
+
 configurations:
   - params.yaml
 
