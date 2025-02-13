@@ -3,8 +3,10 @@ kind: ValidatingWebhookConfiguration
 metadata:
   name: validating-webhook-configuration
 webhooks:
-  - $patch: delete
-    name: vpod.kb.io
+  - name: vpod.kb.io
+    namespaceSelector:
+      matchLabels:
+        kueue-managed: "true"
   - name: vjob.kb.io
     namespaceSelector:
       matchExpressions:
