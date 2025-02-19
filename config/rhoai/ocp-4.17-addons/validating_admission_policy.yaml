@@ -10,6 +10,10 @@ spec:
       apiVersions: ["v1"]
       operations:  ["CREATE", "UPDATE"]
       resources:   ["rayclusters"]
+    - apiGroups:   ["kubeflow.org"]
+      apiVersions: ["v1"]
+      operations:  ["CREATE", "UPDATE"]
+      resources:   ["pytorchjobs"]
   matchConditions:
     - name: "skip-if-deleting"
       expression: "!has(object.metadata.deletionTimestamp)"
