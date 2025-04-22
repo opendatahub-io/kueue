@@ -2484,6 +2484,13 @@ Possible values are:</p>
 <p>Defaults to true</p>
 </td>
 </tr>
+<tr><td><code>replicas</code> <B>[Required]</B><br/>
+<code>int32</code>
+</td>
+<td>
+   <p>Defaults to 1.</p>
+</td>
+</tr>
 <tr><td><code>maximumExecutionTimeSeconds</code><br/>
 <code>int32</code>
 </td>

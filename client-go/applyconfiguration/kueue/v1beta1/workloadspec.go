@@ -26,6 +26,7 @@ type WorkloadSpecApplyConfiguration struct {
 	Priority                    *int32                     `json:"priority,omitempty"`
 	PriorityClassSource         *string                    `json:"priorityClassSource,omitempty"`
 	Active                      *bool                      `json:"active,omitempty"`
+	Replicas                    *int32                     `json:"replicas,omitempty"`
 	MaximumExecutionTimeSeconds *int32                     `json:"maximumExecutionTimeSeconds,omitempty"`
 }
 
@@ -85,6 +86,14 @@ func (b *WorkloadSpecApplyConfiguration) WithPriorityClassSource(value string) *
 // If called multiple times, the Active field is set to the value of the last call.
 func (b *WorkloadSpecApplyConfiguration) WithActive(value bool) *WorkloadSpecApplyConfiguration {
 	b.Active = &value
+	return b
+}
+
+// WithReplicas sets the Replicas field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Replicas field is set to the value of the last call.
+func (b *WorkloadSpecApplyConfiguration) WithReplicas(value int32) *WorkloadSpecApplyConfiguration {
+	b.Replicas = &value
 	return b
 }
 
