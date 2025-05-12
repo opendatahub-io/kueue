@@ -1631,6 +1631,11 @@ func (in *WorkloadSpec) DeepCopyInto(out *WorkloadSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.Replicas != nil {
+		in, out := &in.Replicas, &out.Replicas
+		*out = new(int32)
+		**out = **in
+	}
 	if in.MaximumExecutionTimeSeconds != nil {
 		in, out := &in.MaximumExecutionTimeSeconds, &out.MaximumExecutionTimeSeconds
 		*out = new(int32)
@@ -1689,6 +1694,11 @@ func (in *WorkloadStatus) DeepCopyInto(out *WorkloadStatus) {
 	}
 	if in.AccumulatedPastExexcutionTimeSeconds != nil {
 		in, out := &in.AccumulatedPastExexcutionTimeSeconds, &out.AccumulatedPastExexcutionTimeSeconds
+		*out = new(int32)
+		**out = **in
+	}
+	if in.Replicas != nil {
+		in, out := &in.Replicas, &out.Replicas
 		*out = new(int32)
 		**out = **in
 	}

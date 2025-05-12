@@ -1,0 +1,26 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: scaledobject
+  namespace: demo
+spec:
+  scaleTargetRef:
+    apiVersion: kueue.x-k8s.io/v1beta1
+    name: raycluster-chris-raycluster-b4a16
+    kind: Workload
+  minReplicaCount: 0
+  maxReplicaCount: 1
+  pollingInterval: 30
+  cooldownPeriod: 120 # if no utilization in the past minute, after 2 minutes, scale down to 0.
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: https://thanos-querier.openshift-monitoring.svc.cluster.local:9092
+      namespace: demo
+      metricName: s0-prometheus
+      threshold: '9999'
+      query: sum(rate(DCGM_FI_DEV_GPU_UTIL{pod=~"chris-raycluster.*"}[1m]))
+      authModes: bearer
+    authenticationRef:
+      name: keda-trigger-auth-prometheus
+      kind: TriggerAuthentication

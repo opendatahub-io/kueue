@@ -31,6 +31,7 @@ type WorkloadStatusApplyConfiguration struct {
 	AdmissionChecks                      []AdmissionCheckStateApplyConfiguration `json:"admissionChecks,omitempty"`
 	ResourceRequests                     []PodSetRequestApplyConfiguration       `json:"resourceRequests,omitempty"`
 	AccumulatedPastExexcutionTimeSeconds *int32                                  `json:"accumulatedPastExexcutionTimeSeconds,omitempty"`
+	Replicas                             *int32                                  `json:"replicas,omitempty"`
 }
 
 // WorkloadStatusApplyConfiguration constructs a declarative configuration of the WorkloadStatus type for use with
@@ -112,5 +113,13 @@ func (b *WorkloadStatusApplyConfiguration) WithResourceRequests(values ...*PodSe
 // If called multiple times, the AccumulatedPastExexcutionTimeSeconds field is set to the value of the last call.
 func (b *WorkloadStatusApplyConfiguration) WithAccumulatedPastExexcutionTimeSeconds(value int32) *WorkloadStatusApplyConfiguration {
 	b.AccumulatedPastExexcutionTimeSeconds = &value
+	return b
+}
+
+// WithReplicas sets the Replicas field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Replicas field is set to the value of the last call.
+func (b *WorkloadStatusApplyConfiguration) WithReplicas(value int32) *WorkloadStatusApplyConfiguration {
+	b.Replicas = &value
 	return b
 }

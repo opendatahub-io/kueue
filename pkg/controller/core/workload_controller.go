@@ -139,6 +139,12 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		// we'll ignore not-found errors, since there is nothing to do.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	// if wl.Status.LabelSelector == "" {
+	// 	wl.Status.LabelSelector = "autoscaler.fake/dummy=true"
+	// 	if err := r.client.Status().Update(ctx, &wl); err != nil {
+	// 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	// 	}
+	// }
 	log := ctrl.LoggerFrom(ctx).WithValues("workload", klog.KObj(&wl))
 	ctx = ctrl.LoggerInto(ctx, log)
 	log.V(2).Info("Reconciling Workload")
@@ -151,7 +157,37 @@ func (r *WorkloadReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
+	if !workload.IsActive(&wl) {
+		if wl.Spec.Replicas != nil && *wl.Spec.Replicas == 1 {
+			wl.Spec.Active = ptr.To(true)
+			if err := r.client.Update(ctx, &wl); err != nil {
+				return ctrl.Result{}, client.IgnoreNotFound(err)
+			}
+		}
+	}
+
 	if workload.IsActive(&wl) {
+		// if wl.Status.Replicas == nil {
+		// 	var replicas int32 = 1 // dummy default
+		// 	if wl.Spec.Replicas != nil {
+		// 		replicas = *wl.Spec.Replicas
+		// 	}
+		// 	wl.Status.Replicas = &replicas
+		// 	if err := r.client.Status().Update(ctx, &wl); err != nil {
+		// 		return ctrl.Result{}, client.IgnoreNotFound(err)
+		// 	}
+		// }
+		if wl.Spec.Replicas != nil && *wl.Spec.Replicas == 0 {
+			apimeta.SetStatusCondition(&wl.Status.Conditions, metav1.Condition{
+				Type: kueue.WorkloadDeactivationTarget,
+				Status: metav1.ConditionTrue,
+				Reason: "ScaledToZero",
+				Message: "The workload was scaled to zero",
+			})
+			wl.Spec.Active = ptr.To(false)
+			err := r.client.Update(ctx, &wl)
+			return ctrl.Result{}, client.IgnoreNotFound(err)
+		}
 		if apimeta.IsStatusConditionTrue(wl.Status.Conditions, kueue.WorkloadDeactivationTarget) {
 			wl.Spec.Active = ptr.To(false)
 			err := r.client.Update(ctx, &wl)

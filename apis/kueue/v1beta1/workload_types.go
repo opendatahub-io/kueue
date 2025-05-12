@@ -76,6 +76,10 @@ type WorkloadSpec struct {
 	// +kubebuilder:default=true
 	Active *bool `json:"active,omitempty"`
 
+	// Defaults to 1.
+	// +kubebuilder:default=1
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// maximumExecutionTimeSeconds if provided, determines the maximum time, in seconds,
 	// the workload can be admitted before it's automatically deactivated.
 	//
@@ -352,6 +356,12 @@ type WorkloadStatus struct {
 	//
 	// +optional
 	AccumulatedPastExexcutionTimeSeconds *int32 `json:"accumulatedPastExexcutionTimeSeconds,omitempty"`
+
+	// // Used for autoscalers like KEDA, CMA, and HPA.
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// // Used by HPA and other autoscalers to match pods to metrics.
+	// LabelSelector string `json:"labelSelector,omitempty"`
 }
 
 type RequeueState struct {
@@ -598,6 +608,7 @@ const (
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
+// +kubebuilder:subresource:scale:specpath=.spec.replicas,statuspath=.status.replicas
 // +kubebuilder:printcolumn:name="Queue",JSONPath=".spec.queueName",type="string",description="Name of the queue this workload was submitted to"
 // +kubebuilder:printcolumn:name="Reserved in",JSONPath=".status.admission.clusterQueue",type="string",description="Name of the ClusterQueue where the workload is reserving quota"
 // +kubebuilder:printcolumn:name="Admitted",JSONPath=".status.conditions[?(@.type=='Admitted')].status",type="string",description="Admission status"
