@@ -1,6 +1,6 @@
 module sigs.k8s.io/kueue
 
-go 1.24.0
+go 1.24.13
 
 require (
 	github.com/cert-manager/cert-manager v1.17.1

@@ -4,7 +4,7 @@ FROM ${GOLANG_IMAGE} AS golang
 
 FROM registry.access.redhat.com/ubi9/ubi:latest AS builder
 
-ARG GOLANG_VERSION=1.23.0
+ARG GOLANG_VERSION=1.24.13
 
 # Install system dependencies
 RUN dnf upgrade -y && dnf install -y \

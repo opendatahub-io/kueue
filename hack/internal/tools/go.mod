@@ -1,6 +1,6 @@
 module sigs.k8s.io/kueue/internal/tools
 
-go 1.24.0
+go 1.24.13
 
 require (
 	github.com/gohugoio/hugo v0.145.0
