@@ -1,0 +1,43 @@
+# IMPORTANT: Replace "test-clusterqueue" with the name of an actual ClusterQueue
+# resource deployed in the target cluster before running this experiment live.
+apiVersion: chaos.operatorchaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: kueue-clusterqueue-crd-mutation
+spec:
+  tier: 3
+  target:
+    operator: kueue
+    component: kueue-controller-manager
+    resource: ClusterQueue
+  steadyState:
+    checks:
+      - type: conditionTrue
+        apiVersion: apps/v1
+        kind: Deployment
+        name: kueue-controller-manager
+        namespace: opendatahub
+        conditionType: Available
+    timeout: "30s"
+  injection:
+    type: CRDMutation
+    dangerLevel: high
+    parameters:
+      apiVersion: kueue.x-k8s.io/v1beta1
+      kind: ClusterQueue
+      name: test-clusterqueue
+      field: chaosTest
+      value: injected
+    ttl: "300s"
+  hypothesis:
+    description: >-
+      When a ClusterQueue CR is mutated with an unknown field via merge patch,
+      the controller should reconcile without error and not propagate the
+      unknown field to downstream scheduling state. The chaos framework removes
+      the injected field via TTL-based cleanup after 300s.
+    recoveryTimeout: 120s
+  blastRadius:
+    maxPodsAffected: 1
+    allowDangerous: true
+    allowedNamespaces:
+      - opendatahub

@@ -1,0 +1,38 @@
+apiVersion: chaos.operatorchaos.io/v1alpha1
+kind: ChaosExperiment
+metadata:
+  name: kueue-config-drift
+spec:
+  tier: 2
+  target:
+    operator: kueue
+    component: kueue-controller-manager
+    resource: ConfigMap/kueue-manager-config
+  steadyState:
+    checks:
+      - type: resourceExists
+        apiVersion: v1
+        kind: ConfigMap
+        name: kueue-manager-config
+        namespace: opendatahub
+    timeout: "30s"
+  injection:
+    type: ConfigDrift
+    dangerLevel: high
+    parameters:
+      name: kueue-manager-config
+      key: chaos-injected
+      value: '{"corrupted":"by-chaos"}'
+      resourceType: ConfigMap
+    ttl: "300s"
+  hypothesis:
+    description: >-
+      When the kueue-manager-config ConfigMap is corrupted, the controller
+      should continue operating with its mounted configuration. The chaos
+      framework restores the injected key via TTL-based cleanup.
+    recoveryTimeout: 180s
+  blastRadius:
+    maxPodsAffected: 1
+    allowDangerous: true
+    allowedNamespaces:
+      - opendatahub

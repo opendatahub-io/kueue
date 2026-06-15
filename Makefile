@@ -406,3 +406,23 @@ ray-project-mini-image-build:
 kind-ray-project-mini-image-build: PLATFORMS=linux/amd64
 kind-ray-project-mini-image-build: PUSH=--load
 kind-ray-project-mini-image-build: ray-project-mini-image-build
+
+##@ Operator Chaos
+
+OPERATOR_CHAOS_VERSION ?= 9e6ac9668b9aaca2f0f2ddf169867862b7925b80
+OPERATOR_CHAOS ?= $(BIN_DIR)/operator-chaos
+
+.PHONY: operator-chaos
+operator-chaos: ## Download operator-chaos locally if necessary.
+	test -s "$(OPERATOR_CHAOS)" || GOBIN="$(BIN_DIR)" $(GO_CMD) install github.com/opendatahub-io/operator-chaos/cmd/operator-chaos@$(OPERATOR_CHAOS_VERSION)
+
+.PHONY: chaos-validate
+chaos-validate: operator-chaos ## Validate knowledge model and chaos experiments offline.
+	$(OPERATOR_CHAOS) validate --knowledge chaos/knowledge/kueue.yaml
+	$(OPERATOR_CHAOS) preflight --knowledge chaos/knowledge/kueue.yaml --local
+	@status=0; \
+	for f in chaos/experiments/*.yaml; do \
+		echo "--- $$f ---"; \
+		$(OPERATOR_CHAOS) validate "$$f" || status=1; \
+	done; \
+	exit $$status

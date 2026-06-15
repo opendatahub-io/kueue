@@ -30,4 +30,5 @@ testbin/*
 # Directory with CRDs for dependencies
 dep-crds
 
-kueue.yaml
+# Generated manifest at repo root (do not ignore chaos/knowledge/kueue.yaml)
+/kueue.yaml
