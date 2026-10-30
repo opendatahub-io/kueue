@@ -18,6 +18,7 @@ package config
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"os"
 
@@ -46,7 +47,7 @@ func fromFile(path string, scheme *runtime.Scheme, cfg *configapi.Configuration)
 }
 
 // addTo provides an alternative to the deprecated o.AndFrom(&cfg)
-func addTo(o *ctrl.Options, cfg *configapi.Configuration) {
+func addTo(o *ctrl.Options, cfg *configapi.Configuration, webhookTLSOpts []func(*tls.Config)) {
 	addLeaderElectionTo(o, cfg)
 	if o.Metrics.BindAddress == "" && cfg.Metrics.BindAddress != "" {
 		o.Metrics.BindAddress = cfg.Metrics.BindAddress
@@ -80,6 +81,8 @@ func addTo(o *ctrl.Options, cfg *configapi.Configuration) {
 		if cfg.Webhook.CertDir != "" {
 			wo.CertDir = cfg.Webhook.CertDir
 		}
+
+		wo.TLSOpts = webhookTLSOpts
 		o.WebhookServer = webhook.NewServer(wo)
 	}
 
@@ -152,8 +155,8 @@ func Encode(scheme *runtime.Scheme, cfg *configapi.Configuration) (string, error
 }
 
 // Load returns a set of controller options and configuration from the given file, if the config file path is empty
-// it used the default configapi values.
-func Load(scheme *runtime.Scheme, configFile string) (ctrl.Options, configapi.Configuration, error) {
+// it used the default configapi values. The optional webhook TLS options are applied to the webhook server.
+func Load(scheme *runtime.Scheme, configFile string, webhookTLSOpts ...func(*tls.Config)) (ctrl.Options, configapi.Configuration, error) {
 	var err error
 	options := ctrl.Options{
 		Scheme: scheme,
@@ -171,7 +174,7 @@ func Load(scheme *runtime.Scheme, configFile string) (ctrl.Options, configapi.Co
 	if err := validate(&cfg, scheme).ToAggregate(); err != nil {
 		return options, cfg, err
 	}
-	addTo(&options, &cfg)
+	addTo(&options, &cfg, webhookTLSOpts)
 	return options, cfg, err
 }
 

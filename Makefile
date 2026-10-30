@@ -118,7 +118,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(CONTROLLER_GEN) \
 		rbac:roleName=manager-role output:rbac:artifacts:config=config/components/rbac\
 		webhook output:webhook:artifacts:config=config/components/webhook\
-		paths="./pkg/controller/...;./pkg/webhooks/...;./pkg/util/cert/...;./pkg/visibility/..."
+		paths="./pkg/controller/...;./pkg/tls/...;./pkg/webhooks/...;./pkg/util/cert/...;./pkg/visibility/..."
 
 .PHONY: update-helm
 update-helm: manifests yq

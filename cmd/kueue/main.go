@@ -65,6 +65,7 @@ import (
 	"sigs.k8s.io/kueue/pkg/metrics"
 	"sigs.k8s.io/kueue/pkg/queue"
 	"sigs.k8s.io/kueue/pkg/scheduler"
+	kueuetls "sigs.k8s.io/kueue/pkg/tls"
 	"sigs.k8s.io/kueue/pkg/util/cert"
 	"sigs.k8s.io/kueue/pkg/util/kubeversion"
 	"sigs.k8s.io/kueue/pkg/util/useragent"
@@ -120,7 +121,18 @@ func main() {
 	flag.Parse()
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	options, cfg, err := apply(configFile)
+	kubeConfig := ctrl.GetConfigOrDie()
+
+	// The cluster TLS profile is resolved before the manager is built because
+	// it configures the webhook server, which is created while loading the
+	// configuration below, and the metrics server.
+	tlsPolicy, err := kueuetls.Resolve(context.Background(), kubeConfig)
+	if err != nil {
+		setupLog.Error(err, "Unable to resolve the cluster TLS profile")
+		os.Exit(1)
+	}
+
+	options, cfg, err := apply(configFile, tlsPolicy.TLSOpts...)
 	if err != nil {
 		setupLog.Error(err, "Unable to load the configuration")
 		os.Exit(1)
@@ -176,11 +188,11 @@ func main() {
 			config.GetCertificate = metricsCertWatcher.GetCertificate
 		})
 	}
+	metricsServerOptions.TLSOpts = append(metricsServerOptions.TLSOpts, tlsPolicy.TLSOpts...)
 	options.Metrics = metricsServerOptions
 
 	metrics.Register()
 
-	kubeConfig := ctrl.GetConfigOrDie()
 	if kubeConfig.UserAgent == "" {
 		kubeConfig.UserAgent = useragent.Default()
 	}
@@ -221,7 +233,14 @@ func main() {
 	cCache := cache.New(mgr.GetClient(), cacheOptions...)
 	queues := queue.NewManager(mgr.GetClient(), cCache, queueOptions...)
 
-	ctx := ctrl.SetupSignalHandler()
+	ctx, stop := context.WithCancel(ctrl.SetupSignalHandler())
+	defer stop()
+
+	if err := kueuetls.SetupProfileWatcher(mgr, tlsPolicy, stop); err != nil {
+		setupLog.Error(err, "Unable to set up the cluster TLS profile watcher")
+		os.Exit(1)
+	}
+
 	if err := setupIndexes(ctx, mgr, &cfg); err != nil {
 		setupLog.Error(err, "Unable to setup indexes")
 		os.Exit(1)
@@ -240,7 +259,7 @@ func main() {
 	go cCache.CleanUpOnContext(ctx)
 
 	if features.Enabled(features.VisibilityOnDemand) {
-		go visibility.CreateAndStartVisibilityServer(ctx, queues)
+		go visibility.CreateAndStartVisibilityServer(ctx, queues, tlsPolicy)
 	}
 
 	setupScheduler(mgr, cCache, queues, &cfg)
@@ -452,8 +471,8 @@ func podsReadyRequeuingTimestamp(cfg *configapi.Configuration) configapi.Requeui
 	return configapi.EvictionTimestamp
 }
 
-func apply(configFile string) (ctrl.Options, configapi.Configuration, error) {
-	options, cfg, err := config.Load(scheme, configFile)
+func apply(configFile string, webhookTLSOpts ...func(*tls.Config)) (ctrl.Options, configapi.Configuration, error) {
+	options, cfg, err := config.Load(scheme, configFile, webhookTLSOpts...)
 	if err != nil {
 		return options, cfg, err
 	}

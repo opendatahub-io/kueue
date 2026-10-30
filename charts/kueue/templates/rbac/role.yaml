@@ -127,6 +127,14 @@ rules:
       - patch
       - update
   - apiGroups:
+      - config.openshift.io
+    resources:
+      - apiservers
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
       - flowcontrol.apiserver.k8s.io
     resources:
       - flowschemas
