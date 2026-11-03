@@ -424,3 +424,18 @@ func TestCheckTLSProfileChangeDetectsTransientFallbackRecovery(t *testing.T) {
 		t.Errorf("checkTLSProfileChange() = %v, want honored change", got)
 	}
 }
+
+func TestIanaCipherSuitesExcludesRC4(t *testing.T) {
+	for _, name := range []string{
+		"TLS_RSA_WITH_RC4_128_SHA",
+		"TLS_ECDHE_ECDSA_WITH_RC4_128_SHA",
+		"TLS_ECDHE_RSA_WITH_RC4_128_SHA",
+	} {
+		if _, ok := ianaCipherSuites[name]; ok {
+			t.Errorf("ianaCipherSuites contains %s", name)
+		}
+		if _, ok := cipherID(name, tls.VersionTLS12); ok {
+			t.Errorf("cipherID(%q) resolved an RC4 suite", name)
+		}
+	}
+}

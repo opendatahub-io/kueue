@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -343,13 +344,18 @@ var tlsVersionMap = map[string]uint16{
 // ianaCipherSuites maps IANA cipher suite names to Go suite IDs, built from the
 // crypto/tls runtime tables so suites this build cannot negotiate are never
 // offered. InsecureCipherSuites is included because the Old profile names
-// suites (3DES and RSA key exchange) that only appear there.
+// suites (3DES and RSA key exchange) that only appear there. RC4 is excluded
+// because no OpenShift profile needs it and a Custom profile must not select
+// it.
 var ianaCipherSuites = func() map[string]uint16 {
 	m := make(map[string]uint16, 32)
 	for _, suite := range tls.CipherSuites() {
 		m[suite.Name] = suite.ID
 	}
 	for _, suite := range tls.InsecureCipherSuites() {
+		if strings.Contains(suite.Name, "RC4") {
+			continue
+		}
 		m[suite.Name] = suite.ID
 	}
 	return m
