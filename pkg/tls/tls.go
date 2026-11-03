@@ -340,33 +340,45 @@ var tlsVersionMap = map[string]uint16{
 	versionTLS13: tls.VersionTLS13,
 }
 
-// openSSLToGoCipher maps OpenShift TLS profile cipher names (OpenSSL style) to
-// Go TLS IDs. TLS 1.3 suite names are already IANA and are looked up without
-// an alias.
-var openSSLToGoCipher = map[string]uint16{
-	"ECDHE-ECDSA-AES128-GCM-SHA256":        tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-	"ECDHE-RSA-AES128-GCM-SHA256":          tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-	"ECDHE-ECDSA-AES256-GCM-SHA384":        tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-	"ECDHE-RSA-AES256-GCM-SHA384":          tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-	"ECDHE-ECDSA-CHACHA20-POLY1305":        tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-	"ECDHE-RSA-CHACHA20-POLY1305":          tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-	"ECDHE-ECDSA-CHACHA20-POLY1305-SHA256": tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-	"ECDHE-RSA-CHACHA20-POLY1305-SHA256":   tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-	"ECDHE-ECDSA-AES128-SHA256":            tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
-	"ECDHE-RSA-AES128-SHA256":              tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-	"ECDHE-ECDSA-AES128-SHA":               tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-	"ECDHE-RSA-AES128-SHA":                 tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-	"ECDHE-ECDSA-AES256-SHA":               tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-	"ECDHE-RSA-AES256-SHA":                 tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-	"AES128-GCM-SHA256":                    tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-	"AES256-GCM-SHA384":                    tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-	"AES128-SHA256":                        tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
-	"AES128-SHA":                           tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-	"AES256-SHA":                           tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-	"DES-CBC3-SHA":                         tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
-	"TLS_AES_128_GCM_SHA256":               tls.TLS_AES_128_GCM_SHA256,
-	"TLS_AES_256_GCM_SHA384":               tls.TLS_AES_256_GCM_SHA384,
-	"TLS_CHACHA20_POLY1305_SHA256":         tls.TLS_CHACHA20_POLY1305_SHA256,
+// ianaCipherSuites maps IANA cipher suite names to Go suite IDs, built from the
+// crypto/tls runtime tables so suites this build cannot negotiate are never
+// offered. InsecureCipherSuites is included because the Old profile names
+// suites (3DES and RSA key exchange) that only appear there.
+var ianaCipherSuites = func() map[string]uint16 {
+	m := make(map[string]uint16, 32)
+	for _, suite := range tls.CipherSuites() {
+		m[suite.Name] = suite.ID
+	}
+	for _, suite := range tls.InsecureCipherSuites() {
+		m[suite.Name] = suite.ID
+	}
+	return m
+}()
+
+// openSSLToIANA maps the OpenSSL cipher names used by OpenShift TLS profiles to
+// the IANA names reported by crypto/tls. IANA names, including the TLS 1.3
+// suite names, pass through unchanged and are not listed here.
+var openSSLToIANA = map[string]string{
+	"ECDHE-ECDSA-AES128-GCM-SHA256":        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+	"ECDHE-RSA-AES128-GCM-SHA256":          "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+	"ECDHE-ECDSA-AES256-GCM-SHA384":        "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+	"ECDHE-RSA-AES256-GCM-SHA384":          "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+	"ECDHE-ECDSA-CHACHA20-POLY1305":        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+	"ECDHE-RSA-CHACHA20-POLY1305":          "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+	"ECDHE-ECDSA-CHACHA20-POLY1305-SHA256": "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+	"ECDHE-RSA-CHACHA20-POLY1305-SHA256":   "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+	"ECDHE-ECDSA-AES128-SHA256":            "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256",
+	"ECDHE-RSA-AES128-SHA256":              "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+	"ECDHE-ECDSA-AES128-SHA":               "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
+	"ECDHE-RSA-AES128-SHA":                 "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+	"ECDHE-ECDSA-AES256-SHA":               "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+	"ECDHE-RSA-AES256-SHA":                 "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+	"AES128-GCM-SHA256":                    "TLS_RSA_WITH_AES_128_GCM_SHA256",
+	"AES256-GCM-SHA384":                    "TLS_RSA_WITH_AES_256_GCM_SHA384",
+	"AES128-SHA256":                        "TLS_RSA_WITH_AES_128_CBC_SHA256",
+	"AES128-SHA":                           "TLS_RSA_WITH_AES_128_CBC_SHA",
+	"AES256-SHA":                           "TLS_RSA_WITH_AES_256_CBC_SHA",
+	"DES-CBC3-SHA":                         "TLS_RSA_WITH_3DES_EDE_CBC_SHA",
 }
 
 // intermediateCiphers is the Go-negotiable subset of the OpenShift Intermediate
@@ -382,24 +394,26 @@ var intermediateCiphers = []uint16{
 
 // oldCiphers is the Go-negotiable subset of the OpenShift Old profile cipher
 // list: the Intermediate suites plus the CBC and 3DES suites Go still supports.
-var oldCiphers = []uint16{
-	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-	tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-	tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
-	tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-	tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-	tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-	tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-	tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-	tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
-	tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-	tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-	tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
-}
+// It is built from intermediateCiphers so the Old profile remains a strict
+// superset by construction.
+var oldCiphers = func() []uint16 {
+	ciphers := make([]uint16, 0, len(intermediateCiphers)+12)
+	ciphers = append(ciphers, intermediateCiphers...)
+	return append(ciphers,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+	)
+}()
 
 // tls13CipherIDs holds the suite IDs the runtime only negotiates with TLS 1.3.
 // They are excluded from a profile whose minimum version is below 1.3 so a
@@ -422,10 +436,18 @@ var tls13CipherIDs = func() map[uint16]bool {
 	return ids
 }()
 
-// cipherID resolves a profile cipher name to a Go cipher ID usable at
-// minVersion.
+// cipherID resolves a profile cipher name (OpenSSL or IANA) to a Go cipher ID
+// usable at minVersion.
 func cipherID(name string, minVersion uint16) (uint16, bool) {
-	id, ok := openSSLToGoCipher[name]
+	iana := name
+	if _, ok := ianaCipherSuites[iana]; !ok {
+		alias, ok := openSSLToIANA[name]
+		if !ok {
+			return 0, false
+		}
+		iana = alias
+	}
+	id, ok := ianaCipherSuites[iana]
 	if !ok {
 		return 0, false
 	}
@@ -433,6 +455,33 @@ func cipherID(name string, minVersion uint16) (uint16, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+type tlsProfileChangeKind int
+
+const (
+	tlsProfileUnchanged tlsProfileChangeKind = iota
+	tlsProfileHonoredChanged
+	tlsProfileAdherenceChanged
+	tlsProfileSpecChanged
+)
+
+// checkTLSProfileChange classifies how an APIServer update changes the
+// effective listener TLS configuration. The honored state is checked first so
+// recovery from a transient fallback is detected even when the raw adherence
+// and profile match the fallback values.
+func checkTLSProfileChange(policy *Policy, tlsSpec *apiServerTLS) tlsProfileChangeKind {
+	honored := shouldHonorClusterTLSProfile(tlsSpec.TLSAdherence)
+	switch {
+	case honored != policy.Honored:
+		return tlsProfileHonoredChanged
+	case tlsSpec.TLSAdherence != policy.Adherence:
+		return tlsProfileAdherenceChanged
+	case !profileSpecEqual(clusterProfile(tlsSpec.TLSSecurityProfile), policy.ClusterProfile):
+		return tlsProfileSpecChanged
+	default:
+		return tlsProfileUnchanged
+	}
 }
 
 // +kubebuilder:rbac:groups=config.openshift.io,resources=apiservers,verbs=get;list;watch
@@ -469,13 +518,16 @@ func SetupProfileWatcher(mgr manager.Manager, policy *Policy, shutdown func()) e
 			logger.Error(err, "Failed to parse APIServer TLS profile, ignoring the event")
 			return
 		}
-		if tlsSpec.TLSAdherence != policy.Adherence {
+		switch checkTLSProfileChange(policy, tlsSpec) {
+		case tlsProfileHonoredChanged:
+			logger.Info("TLS honored state changed, shutting down to rebuild listeners",
+				"old", policy.Honored, "new", shouldHonorClusterTLSProfile(tlsSpec.TLSAdherence))
+			shutdown()
+		case tlsProfileAdherenceChanged:
 			logger.Info("TLS adherence policy changed, shutting down to rebuild listeners",
 				"old", policy.Adherence, "new", tlsSpec.TLSAdherence)
 			shutdown()
-			return
-		}
-		if !profileSpecEqual(clusterProfile(tlsSpec.TLSSecurityProfile), policy.ClusterProfile) {
+		case tlsProfileSpecChanged:
 			logger.Info("TLS profile changed, shutting down to rebuild listeners")
 			shutdown()
 		}

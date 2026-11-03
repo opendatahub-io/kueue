@@ -19,6 +19,7 @@ package tls
 import (
 	"crypto/tls"
 	"errors"
+	"slices"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -324,5 +325,102 @@ func TestProfileSpecEqual(t *testing.T) {
 	}
 	if profileSpecEqual(base, profileSpec{Type: profileModern}) {
 		t.Error("expected different profile types to compare unequal")
+	}
+}
+
+func TestOpenSSLToIANAEveryAliasResolves(t *testing.T) {
+	for alias, iana := range openSSLToIANA {
+		if _, ok := ianaCipherSuites[iana]; !ok {
+			t.Errorf("OpenSSL alias %q maps to %q, which is not a cipher suite in this Go runtime", alias, iana)
+		}
+	}
+}
+
+func TestOldCiphersSupersetOfIntermediate(t *testing.T) {
+	for _, id := range intermediateCiphers {
+		if !slices.Contains(oldCiphers, id) {
+			t.Errorf("oldCiphers is missing intermediate suite %s", tls.CipherSuiteName(id))
+		}
+	}
+}
+
+func TestCipherIDResolvesIANAAndOpenSSL(t *testing.T) {
+	tests := []struct {
+		name string
+		want uint16
+	}{
+		{name: "ECDHE-RSA-AES128-GCM-SHA256", want: tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
+		{name: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", want: tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
+		{name: "ECDHE-ECDSA-AES256-GCM-SHA384", want: tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := cipherID(tt.name, tls.VersionTLS12)
+			if !ok || got != tt.want {
+				t.Errorf("cipherID(%q) = %x, %v; want %x, true", tt.name, got, ok, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckTLSProfileChange(t *testing.T) {
+	base := apiServerObject(strictSpec(map[string]interface{}{"type": "Intermediate"}))
+	policy, err := resolveFromClient(t.Context(), fakeClient(t, base, nil))
+	if err != nil {
+		t.Fatalf("resolveFromClient() error = %v", err)
+	}
+
+	tests := []struct {
+		name string
+		spec map[string]interface{}
+		want tlsProfileChangeKind
+	}{
+		{
+			name: "unchanged",
+			spec: strictSpec(map[string]interface{}{"type": "Intermediate"}),
+			want: tlsProfileUnchanged,
+		},
+		{
+			name: "profile changed",
+			spec: strictSpec(map[string]interface{}{"type": "Old"}),
+			want: tlsProfileSpecChanged,
+		},
+		{
+			name: "adherence label changed",
+			spec: map[string]interface{}{
+				"tlsSecurityProfile": map[string]interface{}{"type": "Intermediate"},
+				"tlsAdherence":       "FuturePolicy",
+			},
+			want: tlsProfileAdherenceChanged,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tlsSpec, err := extractAPIServerTLS(apiServerObject(tt.spec))
+			if err != nil {
+				t.Fatalf("extractAPIServerTLS() error = %v", err)
+			}
+			if got := checkTLSProfileChange(policy, tlsSpec); got != tt.want {
+				t.Errorf("checkTLSProfileChange() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckTLSProfileChangeDetectsTransientFallbackRecovery(t *testing.T) {
+	policy, err := resolveFromClient(t.Context(), fakeClient(t, nil, apierrors.NewServiceUnavailable("apiserver unavailable")))
+	if err != nil {
+		t.Fatalf("resolveFromClient() error = %v", err)
+	}
+	if !policy.UsedTransientFallback || !policy.Honored {
+		t.Fatalf("policy = %+v, want a transient fallback with honored Intermediate defaults", policy)
+	}
+
+	tlsSpec, err := extractAPIServerTLS(apiServerObject(map[string]interface{}{}))
+	if err != nil {
+		t.Fatalf("extractAPIServerTLS() error = %v", err)
+	}
+	if got := checkTLSProfileChange(policy, tlsSpec); got != tlsProfileHonoredChanged {
+		t.Errorf("checkTLSProfileChange() = %v, want honored change", got)
 	}
 }
