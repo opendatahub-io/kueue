@@ -77,9 +77,10 @@ type Policy struct {
 	// EffectiveProfile is the profile applied to the listeners: the cluster
 	// profile when honored, Intermediate defaults on fallback.
 	EffectiveProfile profileSpec
-	// MinVersion and CipherIDs are the parsed effective values.
+	// MinVersion, CipherIDs, and CurveIDs are the parsed effective values.
 	MinVersion uint16
 	CipherIDs  []uint16
+	CurveIDs   []tls.CurveID
 	// MinVersionName and CipherNames hold the OpenShift and IANA names of the
 	// effective values, for servers configured with names instead of
 	// tls.Config options.
@@ -96,12 +97,14 @@ type profileSpec struct {
 	Type          string
 	MinTLSVersion string
 	Ciphers       []string
+	Groups        []string
 }
 
 // tlsCustomProfile is the custom TLS profile of an APIServer.
 type tlsCustomProfile struct {
 	MinTLSVersion string   `json:"minTLSVersion"`
 	Ciphers       []string `json:"ciphers"`
+	Groups        []string `json:"groups"`
 }
 
 // tlsSecurityProfile is the APIServer's tlsSecurityProfile field.
@@ -155,9 +158,11 @@ func resolveFromClient(ctx context.Context, dyn dynamic.Interface) (*Policy, err
 			logger.Info("APIServer object not found, preserving existing listener settings")
 			return policy, nil
 		case apierrors.IsForbidden(err), apierrors.IsUnauthorized(err):
-			return nil, fmt.Errorf("not authorized to read the APIServer TLS profile (grant get/list/watch on apiservers.config.openshift.io and restart): %w", err)
+			return nil, fmt.Errorf("not authorized to read the APIServer TLS profile (grant get/list/watch on "+
+				"apiservers.config.openshift.io and restart): %w", err)
 		case isTransient(err):
-			logger.Info("Transient error reading TLS profile, applying Intermediate defaults until the watcher recovers", "error", err)
+			logger.Info("Transient error reading TLS profile, applying Intermediate defaults until the watcher recovers",
+				"error", err)
 			policy.APIAvailable = true
 			policy.UsedTransientFallback = true
 			policy.ClusterProfile = profileSpec{Type: profileIntermediate}
@@ -177,7 +182,8 @@ func resolveFromClient(ctx context.Context, dyn dynamic.Interface) (*Policy, err
 	policy.ClusterProfile = clusterProfile(tlsSpec.TLSSecurityProfile)
 
 	if !shouldHonorClusterTLSProfile(policy.Adherence) {
-		logger.Info("TLS adherence policy does not include Kueue, preserving existing listener settings", "adherence", policy.Adherence)
+		logger.Info("TLS adherence policy does not include Kueue, preserving existing listener settings",
+			"adherence", policy.Adherence)
 		return policy, nil
 	}
 
@@ -223,6 +229,7 @@ func clusterProfile(profile *tlsSecurityProfile) profileSpec {
 			Type:          profileCustom,
 			MinTLSVersion: profile.Custom.MinTLSVersion,
 			Ciphers:       profile.Custom.Ciphers,
+			Groups:        profile.Custom.Groups,
 		}
 	default:
 		return profileSpec{Type: profileIntermediate}
@@ -251,6 +258,10 @@ func (p *Policy) withEffectiveProfile(spec profileSpec) (*Policy, error) {
 	if err != nil {
 		return nil, err
 	}
+	curves := curveIDs(spec.Groups)
+	if len(spec.Groups) > 0 && len(curves) == 0 {
+		return nil, fmt.Errorf("TLS profile has no groups usable by this runtime: %v", spec.Groups)
+	}
 	// crypto/tls applies CipherSuites to TLS 1.2 and below only; TLS 1.3
 	// suites are negotiated by the runtime.
 	if minVersion >= tls.VersionTLS13 {
@@ -268,6 +279,7 @@ func (p *Policy) withEffectiveProfile(spec profileSpec) (*Policy, error) {
 	p.MinVersion = minVersion
 	p.MinVersionName = minVersionName
 	p.CipherIDs = ciphers
+	p.CurveIDs = curves
 	for _, id := range ciphers {
 		p.CipherNames = append(p.CipherNames, tls.CipherSuiteName(id))
 	}
@@ -276,6 +288,9 @@ func (p *Policy) withEffectiveProfile(spec profileSpec) (*Policy, error) {
 			c.MinVersion = minVersion
 			if len(ciphers) > 0 {
 				c.CipherSuites = ciphers
+			}
+			if len(curves) > 0 {
+				c.CurvePreferences = curves
 			}
 			c.NextProtos = []string{"h2", "http/1.1"}
 		},
@@ -339,6 +354,29 @@ var tlsVersionMap = map[string]uint16{
 	versionTLS11: tls.VersionTLS11,
 	versionTLS12: tls.VersionTLS12,
 	versionTLS13: tls.VersionTLS13,
+}
+
+// tlsGroupToCurveID maps OpenShift TLS group names to Go CurveID values.
+var tlsGroupToCurveID = map[string]tls.CurveID{
+	"secp256r1":          tls.CurveP256,
+	"secp384r1":          tls.CurveP384,
+	"secp521r1":          tls.CurveP521,
+	"X25519":             tls.X25519,
+	"X25519MLKEM768":     tls.X25519MLKEM768,
+	"SecP256r1MLKEM768":  0x11EB,
+	"SecP384r1MLKEM1024": 0x11ED,
+}
+
+// curveIDs resolves the group names supported by this Go runtime. Unknown
+// groups are omitted so mixed lists retain their usable subset.
+func curveIDs(groups []string) []tls.CurveID {
+	var curves []tls.CurveID
+	for _, name := range groups {
+		if id, ok := tlsGroupToCurveID[name]; ok {
+			curves = append(curves, id)
+		}
+	}
+	return curves
 }
 
 // ianaCipherSuites maps IANA cipher suite names to Go suite IDs, built from the
@@ -555,11 +593,17 @@ func SetupProfileWatcher(mgr manager.Manager, policy *Policy, shutdown func()) e
 }
 
 func profileSpecEqual(a, b profileSpec) bool {
-	if a.Type != b.Type || a.MinTLSVersion != b.MinTLSVersion || len(a.Ciphers) != len(b.Ciphers) {
+	if a.Type != b.Type || a.MinTLSVersion != b.MinTLSVersion ||
+		len(a.Ciphers) != len(b.Ciphers) || len(a.Groups) != len(b.Groups) {
 		return false
 	}
 	for i := range a.Ciphers {
 		if a.Ciphers[i] != b.Ciphers[i] {
+			return false
+		}
+	}
+	for i := range a.Groups {
+		if a.Groups[i] != b.Groups[i] {
 			return false
 		}
 	}

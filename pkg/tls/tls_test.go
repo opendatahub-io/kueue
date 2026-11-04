@@ -66,6 +66,10 @@ func strictSpec(profile map[string]interface{}) map[string]interface{} {
 }
 
 func customProfile(minVersion string, ciphers []string) map[string]interface{} {
+	return customProfileWithGroups(minVersion, ciphers, nil)
+}
+
+func customProfileWithGroups(minVersion string, ciphers, groups []string) map[string]interface{} {
 	custom := map[string]interface{}{"minTLSVersion": minVersion}
 	if len(ciphers) > 0 {
 		raw := make([]interface{}, 0, len(ciphers))
@@ -73,6 +77,13 @@ func customProfile(minVersion string, ciphers []string) map[string]interface{} {
 			raw = append(raw, c)
 		}
 		custom["ciphers"] = raw
+	}
+	if len(groups) > 0 {
+		raw := make([]interface{}, 0, len(groups))
+		for _, group := range groups {
+			raw = append(raw, group)
+		}
+		custom["groups"] = raw
 	}
 	return map[string]interface{}{"type": "Custom", "custom": custom}
 }
@@ -111,6 +122,64 @@ func TestResolveStrictCustomProfileApplied(t *testing.T) {
 	}
 	if len(applied.NextProtos) == 0 {
 		t.Error("expected ALPN protocols to be set")
+	}
+}
+
+func TestResolveCustomProfileGroupsApplied(t *testing.T) {
+	groups := []string{"secp256r1", "X25519MLKEM768"}
+	obj := apiServerObject(strictSpec(customProfileWithGroups(versionTLS12, nil, groups)))
+	policy, err := resolveFromClient(t.Context(), fakeClient(t, obj, nil))
+	if err != nil {
+		t.Fatalf("resolveFromClient() error = %v", err)
+	}
+	want := []tls.CurveID{tls.CurveP256, tls.X25519MLKEM768}
+	if !slices.Equal(policy.CurveIDs, want) {
+		t.Errorf("CurveIDs = %v, want %v", policy.CurveIDs, want)
+	}
+	if !slices.Equal(policy.EffectiveProfile.Groups, groups) {
+		t.Errorf("EffectiveProfile.Groups = %v, want %v", policy.EffectiveProfile.Groups, groups)
+	}
+	applied := applyOpts(policy)
+	if !slices.Equal(applied.CurvePreferences, want) {
+		t.Errorf("CurvePreferences = %v, want %v", applied.CurvePreferences, want)
+	}
+}
+
+func TestResolveCustomProfileRejectsAllUnusableGroups(t *testing.T) {
+	obj := apiServerObject(strictSpec(customProfileWithGroups(versionTLS12, nil,
+		[]string{"unknown-group", "unsupported-group"})))
+	if _, err := resolveFromClient(t.Context(), fakeClient(t, obj, nil)); err == nil {
+		t.Fatal("expected all-unusable group list to fail before startup")
+	}
+}
+
+func TestResolveCustomProfileEmptyGroupsLeaveCurvePreferencesUnset(t *testing.T) {
+	obj := apiServerObject(strictSpec(customProfileWithGroups(versionTLS12, nil, nil)))
+	policy, err := resolveFromClient(t.Context(), fakeClient(t, obj, nil))
+	if err != nil {
+		t.Fatalf("resolveFromClient() error = %v", err)
+	}
+	if policy.CurveIDs != nil {
+		t.Errorf("CurveIDs = %v, want nil", policy.CurveIDs)
+	}
+	if applied := applyOpts(policy); applied.CurvePreferences != nil {
+		t.Errorf("CurvePreferences = %v, want nil", applied.CurvePreferences)
+	}
+}
+
+func TestResolveCustomProfileKeepsUsableGroupsFromMixedList(t *testing.T) {
+	obj := apiServerObject(strictSpec(customProfileWithGroups(versionTLS12, nil,
+		[]string{"unknown-group", "secp384r1", "unsupported-group"})))
+	policy, err := resolveFromClient(t.Context(), fakeClient(t, obj, nil))
+	if err != nil {
+		t.Fatalf("resolveFromClient() error = %v", err)
+	}
+	want := []tls.CurveID{tls.CurveP384}
+	if !slices.Equal(policy.CurveIDs, want) {
+		t.Errorf("CurveIDs = %v, want usable subset %v", policy.CurveIDs, want)
+	}
+	if applied := applyOpts(policy); !slices.Equal(applied.CurvePreferences, want) {
+		t.Errorf("CurvePreferences = %v, want usable subset %v", applied.CurvePreferences, want)
 	}
 }
 
@@ -313,7 +382,10 @@ func TestResolveCustomProfileWithoutSettingsFallsBackToIntermediateMinimum(t *te
 }
 
 func TestProfileSpecEqual(t *testing.T) {
-	base := profileSpec{Type: profileCustom, MinTLSVersion: versionTLS12, Ciphers: []string{"a", "b"}}
+	base := profileSpec{
+		Type: profileCustom, MinTLSVersion: versionTLS12,
+		Ciphers: []string{"a", "b"}, Groups: []string{"secp256r1"},
+	}
 	if !profileSpecEqual(base, base) {
 		t.Error("expected identical specs to compare equal")
 	}
@@ -322,6 +394,12 @@ func TestProfileSpecEqual(t *testing.T) {
 	}
 	if profileSpecEqual(base, profileSpec{Type: profileCustom, MinTLSVersion: versionTLS12, Ciphers: []string{"a"}}) {
 		t.Error("expected different cipher lists to compare unequal")
+	}
+	if profileSpecEqual(base, profileSpec{
+		Type: profileCustom, MinTLSVersion: versionTLS12,
+		Ciphers: []string{"a", "b"}, Groups: []string{"secp384r1"},
+	}) {
+		t.Error("expected different group lists to compare unequal")
 	}
 	if profileSpecEqual(base, profileSpec{Type: profileModern}) {
 		t.Error("expected different profile types to compare unequal")
@@ -408,7 +486,8 @@ func TestCheckTLSProfileChange(t *testing.T) {
 }
 
 func TestCheckTLSProfileChangeDetectsTransientFallbackRecovery(t *testing.T) {
-	policy, err := resolveFromClient(t.Context(), fakeClient(t, nil, apierrors.NewServiceUnavailable("apiserver unavailable")))
+	policy, err := resolveFromClient(t.Context(), fakeClient(t, nil,
+		apierrors.NewServiceUnavailable("apiserver unavailable")))
 	if err != nil {
 		t.Fatalf("resolveFromClient() error = %v", err)
 	}
