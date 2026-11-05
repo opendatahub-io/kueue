@@ -91,6 +91,34 @@ type Policy struct {
 	TLSOpts []func(*tls.Config)
 }
 
+// CanServeHTTP2 reports whether the effective policy can serve HTTP/2.
+// TLS 1.3 always qualifies because its suites are runtime-managed and include
+// AES-128-GCM. Lower minimums qualify with Go's default suites (empty list)
+// or when the effective cipher list contains one of the two ECDHE
+// AES-128-GCM suites net/http requires. Servers that configure HTTP/2
+// explicitly (the apiserver secure serving path) must disable HTTP/2 serving
+// when this reports false, because net/http fails the listener at startup
+// otherwise.
+func (p *Policy) CanServeHTTP2() bool {
+	if p == nil || !p.Honored {
+		// Default suites include an ECDHE AES-128-GCM suite.
+		return true
+	}
+	if p.MinVersion >= tls.VersionTLS13 {
+		return true
+	}
+	if len(p.CipherIDs) == 0 {
+		return true
+	}
+	for _, id := range p.CipherIDs {
+		if id == tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ||
+			id == tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 {
+			return true
+		}
+	}
+	return false
+}
+
 // profileSpec mirrors the fields of an OpenShift TLS profile spec that
 // determine the listener configuration.
 type profileSpec struct {

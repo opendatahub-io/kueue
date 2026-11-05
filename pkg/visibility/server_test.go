@@ -17,6 +17,7 @@ limitations under the License.
 package visibility
 
 import (
+	"crypto/tls"
 	"reflect"
 	"testing"
 
@@ -55,6 +56,27 @@ func TestSecureServingTLS(t *testing.T) {
 			}
 			if !reflect.DeepEqual(gotCiphers, tc.wantCiphers) {
 				t.Errorf("ciphers = %v, want %v", gotCiphers, tc.wantCiphers)
+			}
+		})
+	}
+}
+
+func TestSecureServingHTTP2Disabled(t *testing.T) {
+	cases := map[string]struct {
+		policy *kueuetls.Policy
+		want   bool
+	}{
+		"nil policy keeps HTTP/2":                  {},
+		"policy not honored keeps HTTP/2":          {policy: &kueuetls.Policy{Honored: false, MinVersion: tls.VersionTLS12, CipherIDs: []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384}}},
+		"TLS 1.3 policy keeps HTTP/2":              {policy: &kueuetls.Policy{Honored: true, MinVersion: tls.VersionTLS13}},
+		"TLS 1.2 with AES-128-GCM keeps HTTP/2":    {policy: &kueuetls.Policy{Honored: true, MinVersion: tls.VersionTLS12, CipherIDs: []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256}}},
+		"AES-256-only TLS 1.2 disables HTTP/2":     {want: true, policy: &kueuetls.Policy{Honored: true, MinVersion: tls.VersionTLS12, CipherIDs: []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384}}},
+		"CBC-only TLS 1.0 minimum disables HTTP/2": {want: true, policy: &kueuetls.Policy{Honored: true, MinVersion: tls.VersionTLS10, CipherIDs: []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA}}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := secureServingHTTP2Disabled(tc.policy); got != tc.want {
+				t.Errorf("secureServingHTTP2Disabled() = %v, want %v", got, tc.want)
 			}
 		})
 	}

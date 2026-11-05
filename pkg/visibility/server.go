@@ -93,6 +93,13 @@ func applyVisibilityServerOptions(config *genericapiserver.RecommendedConfig, tl
 	o.SecureServing.ServerCert.CertDirectory = "/tmp"
 	o.Admission.DisablePlugins = disabledPlugins
 	o.SecureServing.MinTLSVersion, o.SecureServing.CipherSuites = secureServingTLS(tlsPolicy)
+	if secureServingHTTP2Disabled(tlsPolicy) {
+		// The apiserver secure serving path configures HTTP/2 explicitly and
+		// fails the listener at startup when the TLS 1.2 cipher list has no
+		// ECDHE AES-128-GCM suite. Serve HTTP/1.1 only for such profiles
+		// instead of failing to start.
+		o.SecureServing.DisableHTTP2Serving = true
+	}
 	if err := o.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
 		return fmt.Errorf("error creating self-signed certificates: %v", err)
 	}
@@ -107,6 +114,15 @@ func secureServingTLS(tlsPolicy *kueuetls.Policy) (string, []string) {
 		return "", nil
 	}
 	return tlsPolicy.MinVersionName, tlsPolicy.CipherNames
+}
+
+// secureServingHTTP2Disabled reports whether the visibility server must
+// disable HTTP/2 serving for the policy. The apiserver secure serving path
+// configures HTTP/2 explicitly and fails the listener at startup when the
+// TLS 1.2 cipher list has no ECDHE AES-128-GCM suite, so such policies are
+// served over HTTP/1.1 only instead of failing to start.
+func secureServingHTTP2Disabled(tlsPolicy *kueuetls.Policy) bool {
+	return tlsPolicy != nil && tlsPolicy.Honored && !tlsPolicy.CanServeHTTP2()
 }
 
 func newVisibilityServerConfig() *genericapiserver.RecommendedConfig {
