@@ -347,6 +347,9 @@ func (s profileSpec) toGo() (uint16, string, []uint16, error) {
 		}
 		var ciphers []uint16
 		for _, name := range s.Ciphers {
+			if isBannedCipherSuite(name) {
+				return 0, "", nil, fmt.Errorf("cipher suite %q is refused: RC4, 3DES, and SHA-1 CBC suites cannot be configured (the built-in Old profile still serves them as documented)", name)
+			}
 			if id, ok := cipherID(name, minVersion); ok {
 				ciphers = append(ciphers, id)
 			}
@@ -405,6 +408,42 @@ func curveIDs(groups []string) []tls.CurveID {
 		}
 	}
 	return curves
+}
+
+// bannedCipherSuites are cipher suites a custom profile may not configure,
+// in IANA and OpenSSL spelling: RC4 (RFC 7465), 3DES, and the SHA-1 CBC
+// suites. Naming one fails resolution with a clear error instead of the
+// suite being silently filtered. The built-in Old profile is honored as
+// documented and still serves these suites when the cluster selects it.
+var bannedCipherSuites = map[string]struct{}{
+	// RC4
+	"TLS_RSA_WITH_RC4_128_SHA":              {},
+	"TLS_ECDHE_RSA_WITH_RC4_128_SHA":        {},
+	"TLS_ECDHE_ECDSA_WITH_RC4_128_SHA":      {},
+	"RC4-SHA":                               {},
+	// 3DES
+	"TLS_RSA_WITH_3DES_EDE_CBC_SHA":         {},
+	"DES-CBC3-SHA":                          {},
+	// SHA-1 CBC
+	"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA":  {},
+	"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA":    {},
+	"TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA":  {},
+	"TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA":    {},
+	"TLS_RSA_WITH_AES_128_CBC_SHA":          {},
+	"TLS_RSA_WITH_AES_256_CBC_SHA":          {},
+	"ECDHE-ECDSA-AES128-SHA":                {},
+	"ECDHE-RSA-AES128-SHA":                  {},
+	"ECDHE-ECDSA-AES256-SHA":                {},
+	"ECDHE-RSA-AES256-SHA":                  {},
+	"AES128-SHA":                            {},
+	"AES256-SHA":                            {},
+}
+
+// isBannedCipherSuite reports whether name (IANA or OpenSSL spelling) is a
+// suite a custom profile may not configure.
+func isBannedCipherSuite(name string) bool {
+	_, banned := bannedCipherSuites[name]
+	return banned
 }
 
 // ianaCipherSuites maps IANA cipher suite names to Go suite IDs, built from the

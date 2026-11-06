@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -550,5 +551,57 @@ func TestSecPMLKEMGroupsValidateOnGo126(t *testing.T) {
 	want := []tls.CurveID{tls.SecP256r1MLKEM768, tls.SecP384r1MLKEM1024}
 	if !slices.Equal(curves, want) {
 		t.Fatalf("curveIDs() = %v, want %v", curves, want)
+	}
+}
+
+func TestCustomProfileRejectsBannedCipherSuites(t *testing.T) {
+	cases := []struct {
+		name    string
+		ciphers []string
+	}{
+		{name: "3DES OpenSSL spelling", ciphers: []string{"DES-CBC3-SHA"}},
+		{name: "3DES IANA spelling", ciphers: []string{"TLS_RSA_WITH_3DES_EDE_CBC_SHA"}},
+		{name: "SHA-1 CBC OpenSSL spelling", ciphers: []string{"ECDHE-RSA-AES128-SHA"}},
+		{name: "SHA-1 CBC IANA spelling", ciphers: []string{"TLS_RSA_WITH_AES_128_CBC_SHA"}},
+		{name: "RC4 spelling", ciphers: []string{"TLS_RSA_WITH_RC4_128_SHA"}},
+		{
+			name:    "mixed list with an eligible suite still rejected",
+			ciphers: []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "DES-CBC3-SHA"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := profileSpec{Type: profileCustom, MinTLSVersion: versionTLS12, Ciphers: tc.ciphers}
+			_, _, _, err := spec.toGo()
+			if err == nil {
+				t.Fatalf("toGo() expected a banned-suite error for %v", tc.ciphers)
+			}
+			if !strings.Contains(err.Error(), "is refused") {
+				t.Fatalf("toGo() error = %v, want the banned-suite rejection", err)
+			}
+		})
+	}
+}
+
+func TestOldProfileStillServesDocumentedLegacySuites(t *testing.T) {
+	// The built-in Old profile is honored as documented: it keeps serving
+	// the 3DES and SHA-1 CBC suites the OpenShift profile defines, while a
+	// custom profile naming them is rejected.
+	spec := profileSpec{Type: profileOld}
+	_, _, ciphers, err := spec.toGo()
+	if err != nil {
+		t.Fatalf("toGo() error = %v", err)
+	}
+	found := map[uint16]bool{}
+	for _, id := range ciphers {
+		found[id] = true
+	}
+	for _, id := range []uint16{
+		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+	} {
+		if !found[id] {
+			t.Errorf("Old profile is missing documented suite %s", tls.CipherSuiteName(id))
+		}
 	}
 }
