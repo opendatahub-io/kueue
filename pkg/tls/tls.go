@@ -391,8 +391,8 @@ var tlsGroupToCurveID = map[string]tls.CurveID{
 	"secp521r1":          tls.CurveP521,
 	"X25519":             tls.X25519,
 	"X25519MLKEM768":     tls.X25519MLKEM768,
-	"SecP256r1MLKEM768":  0x11EB,
-	"SecP384r1MLKEM1024": 0x11ED,
+	"SecP256r1MLKEM768":  tls.SecP256r1MLKEM768,
+	"SecP384r1MLKEM1024": tls.SecP384r1MLKEM1024,
 }
 
 // curveIDs resolves the group names supported by this Go runtime. Unknown

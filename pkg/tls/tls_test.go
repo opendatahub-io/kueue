@@ -541,3 +541,14 @@ func TestCanServeHTTP2(t *testing.T) {
 		})
 	}
 }
+
+func TestSecPMLKEMGroupsValidateOnGo126(t *testing.T) {
+	// The SecP*MLKEM* groups are implemented by crypto/tls from Go 1.26;
+	// the module requires that toolchain, so a profile listing only them
+	// must resolve instead of leaving the listener with no usable group.
+	curves := curveIDs([]string{"SecP256r1MLKEM768", "SecP384r1MLKEM1024"})
+	want := []tls.CurveID{tls.SecP256r1MLKEM768, tls.SecP384r1MLKEM1024}
+	if !slices.Equal(curves, want) {
+		t.Fatalf("curveIDs() = %v, want %v", curves, want)
+	}
+}
