@@ -18,6 +18,7 @@ package visibility
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"os"
@@ -93,6 +94,9 @@ func applyVisibilityServerOptions(config *genericapiserver.RecommendedConfig, tl
 	o.SecureServing.ServerCert.CertDirectory = "/tmp"
 	o.Admission.DisablePlugins = disabledPlugins
 	o.SecureServing.MinTLSVersion, o.SecureServing.CipherSuites = secureServingTLS(tlsPolicy)
+	if err := validateVisibilityTLSCipherSuites(tlsPolicy, o.SecureServing.CipherSuites); err != nil {
+		return err
+	}
 	if secureServingHTTP2Disabled(tlsPolicy) {
 		// The apiserver secure serving path configures HTTP/2 explicitly and
 		// fails the listener at startup when the TLS 1.2 cipher list has no
@@ -103,7 +107,36 @@ func applyVisibilityServerOptions(config *genericapiserver.RecommendedConfig, tl
 	if err := o.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
 		return fmt.Errorf("error creating self-signed certificates: %v", err)
 	}
+	// NOTE: the profile's curve preferences (tlsPolicy.CurveIDs) are not
+	// applied here. The apiserver's SecureServingInfo exposes only
+	// MinTLSVersion and CipherSuites; its tls.Config is constructed
+	// internally during Serve with no curve-preferences hook. The manager's
+	// webhook and metrics listeners apply the full profile including curves;
+	// the visibility listener's curve set stays at the Go defaults until the
+	// apiserver serving path gains a curve knob.
 	return o.ApplyTo(config)
+}
+
+// cipherSuitesAllECDSA reports whether every IANA cipher suite name uses
+// ECDSA authentication, which an RSA certificate cannot negotiate.
+func cipherSuitesAllECDSA(names []string) bool {
+	if len(names) == 0 {
+		return false
+	}
+	for _, name := range names {
+		if !strings.Contains(name, "ECDSA") {
+			return false
+		}
+	}
+	return true
+}
+
+func validateVisibilityTLSCipherSuites(tlsPolicy *kueuetls.Policy, names []string) error {
+	if tlsPolicy != nil && tlsPolicy.Honored && tlsPolicy.MinVersion < tls.VersionTLS13 &&
+		len(names) > 0 && cipherSuitesAllECDSA(names) {
+		return fmt.Errorf("honored TLS profile allows only ECDSA TLS 1.2 cipher suites, but the visibility listener uses an RSA self-signed certificate")
+	}
+	return nil
 }
 
 // secureServingTLS returns the OpenShift TLS version and IANA cipher suite

@@ -53,7 +53,9 @@ ARTIFACTS ?= $(PROJECT_DIR)/bin
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 BASE_IMAGE ?= gcr.io/distroless/static:nonroot
-BUILDER_IMAGE ?= golang:$(GO_VERSION)
+# Default to the digest-pinned builder from the Dockerfile so published
+# builds use the reviewed image; explicit BUILDER_IMAGE overrides still work.
+BUILDER_IMAGE ?= $(shell sed -n 's/^ARG BUILDER_IMAGE=//p' Dockerfile | head -n1)
 CGO_ENABLED ?= 0
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.

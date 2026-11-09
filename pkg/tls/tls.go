@@ -22,14 +22,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/rest"
@@ -67,6 +70,10 @@ type Policy struct {
 	// APIAvailable reports whether the APIServer object can be watched on
 	// this cluster. It is false outside OpenShift.
 	APIAvailable bool
+	// APIServerFound reports whether the named object existed during initial
+	// resolution. The watcher compares this with its initial cache after sync
+	// to catch deletion in the Resolve-to-watch bootstrap window.
+	APIServerFound bool
 	// UsedTransientFallback reports that the profile could not be read due
 	// to a transient error and hardened Intermediate defaults are applied
 	// until the watcher observes the real profile.
@@ -184,22 +191,32 @@ func resolveFromClient(ctx context.Context, dyn dynamic.Interface) (*Policy, err
 			return policy, nil
 		case apierrors.IsNotFound(err):
 			logger.Info("APIServer object not found, preserving existing listener settings")
+			// Bootstrap races can return NotFound even on OpenShift clusters:
+			// mark the API available so the watcher registers, and its AddFunc
+			// catches the object's creation to rebuild the listeners.
+			policy.APIAvailable = true
 			return policy, nil
 		case apierrors.IsForbidden(err), apierrors.IsUnauthorized(err):
+			statusCode, _ := apiStatusCode(err)
 			return nil, fmt.Errorf("not authorized to read the APIServer TLS profile (grant get/list/watch on "+
-				"apiservers.config.openshift.io and restart): %w", err)
+				"apiservers.config.openshift.io and restart, API status code %d)", statusCode)
 		case isTransient(err):
+			statusCode, _ := apiStatusCode(err)
 			logger.Info("Transient error reading TLS profile, applying Intermediate defaults until the watcher recovers",
-				"error", err)
+				"errorClass", transientErrorClass(err), "statusCode", statusCode)
 			policy.APIAvailable = true
 			policy.UsedTransientFallback = true
 			policy.ClusterProfile = profileSpec{Type: profileIntermediate}
 			return policy.withEffectiveProfile(policy.ClusterProfile)
 		default:
+			if code, isAPIStatus := apiStatusCode(err); isAPIStatus {
+				return nil, fmt.Errorf("reading APIServer TLS profile failed with API status code %d", code)
+			}
 			return nil, fmt.Errorf("reading APIServer TLS profile: %w", err)
 		}
 	}
 
+	policy.APIServerFound = true
 	tlsSpec, err := extractAPIServerTLS(obj)
 	if err != nil {
 		return nil, fmt.Errorf("parsing APIServer TLS profile: %w", err)
@@ -361,11 +378,68 @@ func (s profileSpec) toGo() (uint16, string, []uint16, error) {
 }
 
 func isTransient(err error) bool {
-	return apierrors.IsServiceUnavailable(err) ||
+	// Explicitly transient API statuses first.
+	if apierrors.IsServiceUnavailable(err) ||
 		apierrors.IsTimeout(err) ||
 		apierrors.IsServerTimeout(err) ||
 		apierrors.IsTooManyRequests(err) ||
-		errors.Is(err, context.DeadlineExceeded)
+		apierrors.IsInternalError(err) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	// Any other API-status error is a server-side rejection the caller did
+	// not already classify: fail closed rather than letting the transport
+	// predicates below catch it.
+	var statusErr *apierrors.StatusError
+	if errors.As(err, &statusErr) {
+		return false
+	}
+	// Transport-level errors for non-API-status failures.
+	var netErr net.Error
+	return utilnet.IsConnectionRefused(err) ||
+		utilnet.IsConnectionReset(err) ||
+		utilnet.IsProbableEOF(err) ||
+		utilnet.IsHTTP2ConnectionLost(err) ||
+		(errors.As(err, &netErr) && netErr.Timeout())
+}
+
+func apiStatusCode(err error) (int32, bool) {
+	var apiStatus apierrors.APIStatus
+	if errors.As(err, &apiStatus) {
+		return apiStatus.Status().Code, true
+	}
+	return 0, false
+}
+
+func transientErrorClass(err error) string {
+	switch {
+	case apierrors.IsServiceUnavailable(err):
+		return "service-unavailable"
+	case apierrors.IsTimeout(err):
+		return "timeout"
+	case apierrors.IsServerTimeout(err):
+		return "server-timeout"
+	case apierrors.IsTooManyRequests(err):
+		return "too-many-requests"
+	case apierrors.IsInternalError(err):
+		return "internal-error"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline-exceeded"
+	case utilnet.IsConnectionRefused(err):
+		return "connection-refused"
+	case utilnet.IsConnectionReset(err):
+		return "connection-reset"
+	case utilnet.IsProbableEOF(err):
+		return "unexpected-eof"
+	case utilnet.IsHTTP2ConnectionLost(err):
+		return "http2-connection-lost"
+	default:
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return "network-timeout"
+		}
+		return "transient"
+	}
 }
 
 const (
@@ -417,26 +491,28 @@ func curveIDs(groups []string) []tls.CurveID {
 // documented and still serves these suites when the cluster selects it.
 var bannedCipherSuites = map[string]struct{}{
 	// RC4
-	"TLS_RSA_WITH_RC4_128_SHA":              {},
-	"TLS_ECDHE_RSA_WITH_RC4_128_SHA":        {},
-	"TLS_ECDHE_ECDSA_WITH_RC4_128_SHA":      {},
-	"RC4-SHA":                               {},
+	"TLS_RSA_WITH_RC4_128_SHA":         {},
+	"TLS_ECDHE_RSA_WITH_RC4_128_SHA":   {},
+	"TLS_ECDHE_ECDSA_WITH_RC4_128_SHA": {},
+	"RC4-SHA":                          {},
 	// 3DES
-	"TLS_RSA_WITH_3DES_EDE_CBC_SHA":         {},
-	"DES-CBC3-SHA":                          {},
+	"TLS_RSA_WITH_3DES_EDE_CBC_SHA":       {},
+	"TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA": {},
+	"DES-CBC3-SHA":                        {},
+	"ECDHE-RSA-DES-CBC3-SHA":              {},
 	// SHA-1 CBC
-	"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA":  {},
-	"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA":    {},
-	"TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA":  {},
-	"TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA":    {},
-	"TLS_RSA_WITH_AES_128_CBC_SHA":          {},
-	"TLS_RSA_WITH_AES_256_CBC_SHA":          {},
-	"ECDHE-ECDSA-AES128-SHA":                {},
-	"ECDHE-RSA-AES128-SHA":                  {},
-	"ECDHE-ECDSA-AES256-SHA":                {},
-	"ECDHE-RSA-AES256-SHA":                  {},
-	"AES128-SHA":                            {},
-	"AES256-SHA":                            {},
+	"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA": {},
+	"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA":   {},
+	"TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA": {},
+	"TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA":   {},
+	"TLS_RSA_WITH_AES_128_CBC_SHA":         {},
+	"TLS_RSA_WITH_AES_256_CBC_SHA":         {},
+	"ECDHE-ECDSA-AES128-SHA":               {},
+	"ECDHE-RSA-AES128-SHA":                 {},
+	"ECDHE-ECDSA-AES256-SHA":               {},
+	"ECDHE-RSA-AES256-SHA":                 {},
+	"AES128-SHA":                           {},
+	"AES256-SHA":                           {},
 }
 
 // isBannedCipherSuite reports whether name (IANA or OpenSSL spelling) is a
@@ -604,12 +680,19 @@ func SetupProfileWatcher(mgr manager.Manager, policy *Policy, shutdown func()) e
 	if policy == nil || !policy.APIAvailable {
 		return nil
 	}
-	logger := log.Log.WithName("tls")
-
 	dyn, err := dynamic.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return fmt.Errorf("creating dynamic client for TLS profile watcher: %w", err)
 	}
+	return setupProfileWatcher(mgr, dyn, policy, shutdown)
+}
+
+type profileWatcherRunnableRegistrar interface {
+	Add(manager.Runnable) error
+}
+
+func setupProfileWatcher(mgr profileWatcherRunnableRegistrar, dyn dynamic.Interface, policy *Policy, shutdown func()) error {
+	logger := log.Log.WithName("tls")
 	factory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(dyn, 0, metav1.NamespaceAll,
 		func(options *metav1.ListOptions) {
 			options.FieldSelector = "metadata.name=" + apiServerName
@@ -619,44 +702,97 @@ func SetupProfileWatcher(mgr manager.Manager, policy *Policy, shutdown func()) e
 	// The handler runs for the initial list as well as updates, so a change
 	// made between the startup resolution and the watch being established is
 	// still detected.
-	check := func(obj interface{}) {
-		apiServer, ok := obj.(*unstructured.Unstructured)
-		if !ok {
-			return
-		}
-		tlsSpec, err := extractAPIServerTLS(apiServer)
-		if err != nil {
-			logger.Error(err, "Failed to parse APIServer TLS profile, ignoring the event")
-			return
-		}
-		switch checkTLSProfileChange(policy, tlsSpec) {
-		case tlsProfileHonoredChanged:
-			logger.Info("TLS honored state changed, shutting down to rebuild listeners",
-				"old", policy.Honored, "new", shouldHonorClusterTLSProfile(tlsSpec.TLSAdherence))
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			handleAPIServerEvent(logger, policy, shutdown, obj)
+		},
+		UpdateFunc: func(_, newObj interface{}) {
+			handleAPIServerEvent(logger, policy, shutdown, newObj)
+		},
+		DeleteFunc: func(_ interface{}) {
+			// Deleting the named APIServer leaves the resolved profile stale;
+			// restart so the listeners rebuild from the absent-object defaults.
+			logger.Info("APIServer object deleted, shutting down to rebuild listeners")
 			shutdown()
-		case tlsProfileAdherenceChanged:
-			logger.Info("TLS adherence policy changed, shutting down to rebuild listeners",
-				"old", policy.Adherence, "new", tlsSpec.TLSAdherence)
-			shutdown()
-		case tlsProfileSpecChanged:
-			logger.Info("TLS profile changed, shutting down to rebuild listeners")
-			shutdown()
-		}
-	}
-	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    check,
-		UpdateFunc: func(_, newObj interface{}) { check(newObj) },
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("registering TLS profile event handler: %w", err)
 	}
 
-	return mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+	// The watcher runs on every replica, not just the leader: each replica's
+	// listeners must restart on a profile change, so the runnable opts out of
+	// leader election.
+	return mgr.Add(nonLeaderElectionRunnable{manager.RunnableFunc(func(ctx context.Context) error {
 		factory.Start(ctx.Done())
 		factory.WaitForCacheSync(ctx.Done())
+		if !informer.HasSynced() {
+			return nil
+		}
+		// If the object existed during Resolve but was deleted before the
+		// watch's initial list, the informer emits no DeleteFunc event. Restart
+		// so listeners rebuild using the absent-object defaults. If it was
+		// already absent during Resolve, do not shut down: AddFunc will catch
+		// its later creation.
+		if policy.APIServerFound {
+			_, exists, getErr := informer.GetIndexer().GetByKey(apiServerName)
+			if getErr != nil {
+				logger.Info("failed to check APIServer cache after initial sync", "errorClass", "cache-lookup")
+				shutdown()
+			} else if shouldRestartForMissingAPIServer(policy, exists) {
+				logger.Info("APIServer object missing after initial watch sync; shutting down to rebuild listeners")
+				shutdown()
+			}
+		}
 		<-ctx.Done()
 		return nil
-	}))
+	})})
+}
+
+// shouldRestartForMissingAPIServer reports whether the APIServer existed
+// during initial resolution but is absent from the watch's initial cache.
+// If it was already absent during resolution, preserve defaults and let the
+// watcher's AddFunc catch a later creation instead of restarting immediately.
+func shouldRestartForMissingAPIServer(policy *Policy, existsInCache bool) bool {
+	return policy != nil && policy.APIServerFound && !existsInCache
+}
+
+// nonLeaderElectionRunnable wraps a manager.Runnable so it runs on all
+// replicas, including non-leaders.
+type nonLeaderElectionRunnable struct {
+	manager.Runnable
+}
+
+func (nonLeaderElectionRunnable) NeedLeaderElection() bool { return false }
+
+// handleAPIServerEvent processes an APIServer watch event: when the resolved
+// TLS settings (honored state, adherence, or profile) changed, it invokes the
+// shutdown callback so the process restarts and the listeners are rebuilt. It
+// is the AddFunc and UpdateFunc handler of the profile watcher, and covers the
+// creation of the APIServer after a NotFound bootstrap.
+func handleAPIServerEvent(logger logr.Logger, policy *Policy, shutdown func(), obj interface{}) {
+	apiServer, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		return
+	}
+	tlsSpec, err := extractAPIServerTLS(apiServer)
+	if err != nil {
+		logger.Info("Failed to parse APIServer TLS profile, ignoring the event", "errorClass", "invalid-object")
+		return
+	}
+	switch checkTLSProfileChange(policy, tlsSpec) {
+	case tlsProfileHonoredChanged:
+		logger.Info("TLS honored state changed, shutting down to rebuild listeners",
+			"old", policy.Honored, "new", shouldHonorClusterTLSProfile(tlsSpec.TLSAdherence))
+		shutdown()
+	case tlsProfileAdherenceChanged:
+		logger.Info("TLS adherence policy changed, shutting down to rebuild listeners",
+			"old", policy.Adherence, "new", tlsSpec.TLSAdherence)
+		shutdown()
+	case tlsProfileSpecChanged:
+		logger.Info("TLS profile changed, shutting down to rebuild listeners")
+		shutdown()
+	}
 }
 
 func profileSpecEqual(a, b profileSpec) bool {

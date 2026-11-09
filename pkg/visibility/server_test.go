@@ -81,3 +81,61 @@ func TestSecureServingHTTP2Disabled(t *testing.T) {
 		})
 	}
 }
+
+func TestCipherSuitesAllECDSA(t *testing.T) {
+	cases := []struct {
+		names []string
+		want  bool
+	}{
+		{nil, false},
+		{[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"}, true},
+		{[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"}, true},
+		{[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}, false},
+		{[]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}, false},
+	}
+	for _, tc := range cases {
+		if got := cipherSuitesAllECDSA(tc.names); got != tc.want {
+			t.Errorf("cipherSuitesAllECDSA(%v) = %v, want %v", tc.names, got, tc.want)
+		}
+	}
+}
+
+func TestValidateVisibilityTLSCipherSuites(t *testing.T) {
+	cases := map[string]struct {
+		policy  *kueuetls.Policy
+		names   []string
+		wantErr bool
+	}{
+		"honored TLS 1.2 ECDSA-only list is rejected": {
+			policy:  &kueuetls.Policy{Honored: true, MinVersion: tls.VersionTLS12},
+			names:   []string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+			wantErr: true,
+		},
+		"honored TLS 1.2 mixed list can use RSA certificate": {
+			policy: &kueuetls.Policy{Honored: true, MinVersion: tls.VersionTLS12},
+			names: []string{
+				"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+				"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			},
+		},
+		"TLS 1.3 cipher negotiation is independent of certificate type": {
+			policy: &kueuetls.Policy{Honored: true, MinVersion: tls.VersionTLS13},
+			names:  []string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+		},
+		"unhonored policy keeps defaults": {
+			policy: &kueuetls.Policy{Honored: false, MinVersion: tls.VersionTLS12},
+			names:  []string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+		},
+		"nil policy keeps defaults": {
+			names: []string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := validateVisibilityTLSCipherSuites(tc.policy, tc.names)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateVisibilityTLSCipherSuites() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
